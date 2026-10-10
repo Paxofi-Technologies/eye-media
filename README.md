@@ -41,7 +41,8 @@ These permissions are defined in one place, `src/lib/rbac.ts`. They are enforced
 
 ## Stack
 
-Next.js 16 (App Router, TypeScript), Drizzle ORM on **MySQL 8 / MariaDB 10.6+**, Zod validation, and Vitest plus Playwright for tests.
+Next.js 16 (App Router, TypeScript) for **both the public site and the admin**, Drizzle ORM on **MySQL 8 / MariaDB 10.6+**, Zod validation, and Vitest plus Playwright for tests.
+The backend currently lives in the Next.js app and will move to **PCF v1.1.0** later without changing the pages. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 It deploys to **cPanel “Setup Node.js App”** for now and can move to a VPS later without code changes. See [docs/DEPLOYMENT-CPANEL.md](docs/DEPLOYMENT-CPANEL.md) and [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Local development
