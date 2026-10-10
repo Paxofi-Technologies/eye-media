@@ -15,10 +15,11 @@
     "db:seed": "tsx scripts/seed.ts",
     "user:create": "tsx scripts/create-user.ts",
     "build:cpanel": "node scripts/build-cpanel.mjs",
-    "test:e2e": "node e2e/run.mjs"
+    "test:e2e": "node e2e/run.mjs",
+    "docs:pdf": "node scripts/build-deploy-pdf.mjs"
   },
   "engines": {
-    "node": ">=20.9"
+    "node": ">=22"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
@@ -39,6 +40,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.0",
+    "marked": "^18.1.0",
     "playwright": "^1.64.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",

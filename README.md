@@ -15,7 +15,7 @@ The Eye Media Group web platform from the [MVP SRS](https://app.notion.com/p/3d8
 - Archive search with category, verification and date filters, plus pagination. Results are shareable URLs and work without JavaScript.
 - Video page with click-to-play YouTube (privacy-enhanced; nothing loads from YouTube until the viewer presses play), related videos, sharing, and SEO/Open Graph/JSON-LD metadata.
 - **Report a story**: citizens submit a story with a video link and contact details, receive a reference number, and the story lands in the moderation queue. Includes rate limiting and a honeypot.
-- Editorial policy page (draft — the wording needs owner approval), sitemap, robots.txt and a health check.
+- Editorial & privacy policy page (approved by the owner), sitemap, robots.txt and a health check.
 
 **Staff admin (`/admin`)**
 - Session login: argon2id password hashing, HttpOnly cookies, rate limiting.
@@ -46,7 +46,7 @@ It deploys to **cPanel “Setup Node.js App”** for now and can move to a VPS l
 
 ## Local development
 
-Requires Node 20.9+ (22 recommended) and MariaDB or MySQL.
+Requires **Node 22+** and MariaDB 10.6+ or MySQL 8.
 
 ```bash
 # 1. Database (MariaDB example)
@@ -58,7 +58,7 @@ sudo mariadb -e "CREATE DATABASE eyemedia CHARACTER SET utf8mb4 COLLATE utf8mb4_
 cp .env.example .env          # then set IP_HASH_SECRET and SEED_ADMIN_PASSWORD
 npm install
 npm run db:migrate
-npm run db:seed               # demo content + 5 demo staff accounts (dev only)
+npm run db:seed               # demo content + 5 demo staff logins (local dev only)
 npm run dev                   # http://localhost:3000
 ```
 
@@ -81,7 +81,7 @@ All of this runs in GitHub Actions on every push, against a real MariaDB 10.11. 
 |---|---|
 | `npm run db:generate` | Create a migration after changing `src/db/schema.ts` (CI fails if you forget) |
 | `npm run user:create -- --email x@y --name "…" --role admin` | Create or reset a staff account (password from `EYE_NEW_PASSWORD`, or generated) |
-| `npm run build:cpanel` | Build the self-contained cPanel release into `release/` and `release.zip` |
+| `npm run build:cpanel` | Build the self-contained cPanel release into `release/` and `release.zip` (CI also attaches it to every passing build on `main`) |
 
 ## Project layout
 

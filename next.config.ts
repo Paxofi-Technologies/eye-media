@@ -6,9 +6,7 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
-  ...((process.env.SITE_URL ?? '').startsWith('https://')
-    ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' }]
-    : []),
+  // HSTS and X-Robots-Tag depend on runtime env, so src/proxy.ts sets them.
 ]
 
 const nextConfig: NextConfig = {

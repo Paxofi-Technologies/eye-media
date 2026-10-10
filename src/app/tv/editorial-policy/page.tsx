@@ -13,10 +13,6 @@ export default function EditorialPolicyPage() {
       <div className="section-head">
         <h1>Editorial policy</h1>
       </div>
-      <div className="alert alert-info">
-        Draft for owner review. Final wording of the editorial, privacy and contributor terms must be approved by Eye
-        Media Group before public launch.
-      </div>
       <p>
         Eye TV operates on an <strong>Open Access + Professional Gatekeeping</strong> model: anyone can send us a
         story, but nothing is published until a trained Eye Media editor has reviewed it.

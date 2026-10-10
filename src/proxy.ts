@@ -2,8 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const SESSION_COOKIES = ['eye_session', '__Host-eye_session']
 
-// Only upgrade sub-resources when the site is actually served over HTTPS.
+// Read at runtime so one build serves staging and production.
+// Only upgrade sub-resources / send HSTS when the site is actually served over HTTPS.
 const HTTPS = (process.env.SITE_URL ?? '').startsWith('https://')
+// Search engines may index the site only when explicitly enabled (production). Staging stays hidden.
+const INDEXING = process.env.SITE_INDEXING === 'true'
 
 function contentSecurityPolicy(nonce: string) {
   const dev = process.env.NODE_ENV === 'development'
@@ -49,6 +52,8 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } })
   response.headers.set('Content-Security-Policy', csp)
+  if (HTTPS) response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
+  if (!INDEXING || pathname.startsWith('/admin')) response.headers.set('X-Robots-Tag', 'noindex, nofollow')
   return response
 }
 

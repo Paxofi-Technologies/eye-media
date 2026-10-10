@@ -1,10 +1,12 @@
 /**
- * Seeds the database with categories and DEMO content so the platform can be reviewed before real
- * content exists. Demo stories, people and the YouTube clip are placeholders taken from the
- * approved prototype — replace them through the admin before public launch.
+ * Loads DEMO content so the platform can be reviewed before real content exists. Demo stories, people
+ * and the YouTube clip are placeholders from the approved prototype — remove them before public launch.
+ * Categories are reference data and come from the migrations, not from here.
  *
- *   npm run db:seed            # seed an empty database
- *   npm run db:seed -- --reset # wipe all Eye TV data first (refused in production)
+ *   npm run db:seed                         # local dev: demo content + 5 demo staff logins
+ *   npm run db:seed -- --reset              # local dev: wipe content and staff first
+ *   node scripts/seed.cjs --demo-content    # staging: demo content only, NO logins created
+ *   node scripts/seed.cjs --remove-demo     # staging/production: delete all content (keeps staff/categories)
  */
 import 'dotenv/config'
 import { randomUUID } from 'node:crypto'
@@ -15,60 +17,73 @@ import { hashPassword } from '../src/lib/password'
 
 const DEMO_YT = 'SlbyzVMQ44w' // public clip used by the prototype to demonstrate playback
 
-const CATEGORIES = [
-  { slug: 'traffic-transport', name: 'Traffic & Transport' },
-  { slug: 'public-safety', name: 'Public Safety' },
-  { slug: 'community-voices', name: 'Community Voices' },
-  { slug: 'environment-sanitation', name: 'Environment & Sanitation' },
-  { slug: 'government-policy', name: 'Government & Policy' },
-]
+const CONTENT_TABLES = ['audit_log', 'schedule_items', 'moderation_reviews', 'submitter_contacts', 'videos']
 
 const HOUR = 3_600_000
 const ago = (h: number) => new Date(Date.now() - h * HOUR)
 
 async function main() {
   const reset = process.argv.includes('--reset')
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Refusing to seed demo content with NODE_ENV=production.')
+  const contentOnly = process.argv.includes('--demo-content')
+  const removeDemo = process.argv.includes('--remove-demo')
+  const production = process.env.NODE_ENV === 'production'
+  // Demo *logins* never go near a server; staging may only receive content (no accounts, no passwords).
+  if (production && !contentOnly && !removeDemo) {
+    throw new Error('In production use --demo-content (no logins are created) or --remove-demo.')
   }
-  const password = process.env.SEED_ADMIN_PASSWORD
-  if (!password || password.length < 12) throw new Error('Set SEED_ADMIN_PASSWORD (12+ chars) in .env')
 
   const { db, pool } = createDb(process.env.DATABASE_URL!, 1)
 
-  if (reset) {
+  const clearContent = async (alsoStaff: boolean) => {
     await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`)
-    for (const table of ['audit_log', 'schedule_items', 'live_stream', 'moderation_reviews', 'submitter_contacts', 'videos', 'video_categories', 'sessions', 'users']) {
-      await db.execute(sql.raw(`TRUNCATE TABLE \`${table}\``))
+    for (const table of [...CONTENT_TABLES, ...(alsoStaff ? ['sessions', 'users'] : [])]) {
+      await db.execute(sql.raw(`DELETE FROM \`${table}\``))
     }
     await db.execute(sql`SET FOREIGN_KEY_CHECKS = 1`)
-    console.log('Existing data cleared.')
-  } else {
-    const existing = await db.select().from(schema.videoCategories).limit(1)
-    if (existing.length) {
-      console.log('Database already seeded. Use --reset to start over.')
-      await pool.end()
-      return
-    }
+    await db
+      .update(schema.liveStream)
+      .set({ title: 'Eye TV Live', description: null, categoryId: null, youtubeVideoId: null, status: 'offline', startedAt: null })
   }
 
-  const cats = CATEGORIES.map((c, i) => ({ ...c, id: randomUUID(), sortOrder: i }))
-  await db.insert(schema.videoCategories).values(cats)
-  const cat = (slug: string) => cats.find((c) => c.slug === slug)!.id
+  if (removeDemo) {
+    await clearContent(false)
+    console.log('All videos, schedule, submissions and audit entries removed. Staff accounts and categories kept.')
+    await pool.end()
+    return
+  }
+  if (reset && !production) {
+    await clearContent(true)
+    console.log('Existing content and staff cleared.')
+  } else if ((await db.select({ id: schema.videos.id }).from(schema.videos).limit(1)).length) {
+    console.log('Content already exists. Use --reset (dev) or --remove-demo first.')
+    await pool.end()
+    return
+  }
 
-  const passwordHash = await hashPassword(password)
-  const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@eyemedia.local').toLowerCase()
-  const staff = (
-    [
+  const cats = await db.select().from(schema.videoCategories)
+  if (!cats.length) throw new Error('No categories found — run the migrations first.')
+  const cat = (slug: string) => cats.find((c) => c.slug === slug)?.id ?? null
+
+  let staff: { id: string; name: string; email: string }[] = []
+  if (!contentOnly) {
+    const password = process.env.SEED_ADMIN_PASSWORD
+    if (!password || password.length < 12) throw new Error('Set SEED_ADMIN_PASSWORD (12+ chars) in .env')
+    const passwordHash = await hashPassword(password)
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@eyemedia.local').toLowerCase()
+    const rows = (
+      [
       { email: adminEmail, name: 'Paxofi Technologies', title: 'Platform administrator', role: 'admin', passwordHash },
       { email: 'editor@eyemedia.local', name: 'Chiamaka Obi', title: 'Senior editor, Eye TV', role: 'editor', passwordHash },
       { email: 'moderator@eyemedia.local', name: 'Blessing Eze', title: 'Community desk moderator', role: 'moderator', passwordHash },
       { email: 'producer@eyemedia.local', name: 'Ngozi Fadipe', title: 'Eye Media field correspondent, Lagos Mainland', role: 'media_manager', passwordHash },
       { email: 'reporter@eyemedia.local', name: 'Tunde Balogun', title: 'Eye Media field reporter', role: 'reporter', passwordHash },
-    ] as const
-  ).map((u) => ({ ...u, id: randomUUID() }))
-  await db.insert(schema.users).values(staff)
-  const person = (name: string) => staff.find((u) => u.name === name)!
+      ] as const
+    ).map((u) => ({ ...u, id: randomUUID() }))
+    await db.insert(schema.users).values(rows)
+    staff = rows
+  }
+  // In --demo-content mode there are no demo accounts: credits stay as names, links stay empty.
+  const personId = (name: string) => staff.find((u) => u.name === name)?.id ?? null
 
   type Seed = Partial<typeof schema.videos.$inferInsert> & { slug: string; title: string; category: string; hoursAgo: number; reporter: string }
   const published: Seed[] = [
@@ -164,7 +179,7 @@ async function main() {
       slug: 'danfo-cashless-driver-interviews', title: 'Danfo cashless rollout — driver interviews',
       summary: 'Raw interviews with drivers at Ojota garage.', description: 'Raw interviews recorded with six danfo drivers about the cashless rollout.',
       categoryId: cat('community-voices'), providerRef: DEMO_YT, durationSeconds: 295, location: 'Ikorodu Road, Lagos',
-      reporterName: 'Tunde Balogun', reporterId: person('Tunde Balogun').id, status: 'pending', createdAt: ago(0.2),
+      reporterName: 'Tunde Balogun', reporterId: personId('Tunde Balogun'), status: 'pending', createdAt: ago(0.2),
     })
   const ojota = { id: randomUUID(), title: 'Ojota flyover pothole complaint' }
   await db
@@ -184,19 +199,19 @@ async function main() {
       slug: 'alaba-market-generator-incident', title: 'Alaba market generator incident, aftermath',
       description: 'Footage of the aftermath of a generator explosion. Contains injured persons — check before publishing.',
       categoryId: cat('public-safety'), providerRef: DEMO_YT, durationSeconds: 220, location: 'Alaba, Lagos',
-      reporterName: 'Chiamaka Obi', reporterId: person('Chiamaka Obi').id, status: 'pending', sensitive: true, createdAt: ago(1),
+      reporterName: 'Chiamaka Obi', reporterId: personId('Chiamaka Obi'), status: 'pending', sensitive: true, createdAt: ago(1),
     })
   await db.insert(schema.videos).values({
     slug: 'laswa-ferry-safety-briefing-raw', title: 'LASWA ferry safety briefing — raw footage',
     description: 'Unedited footage of the LASWA press briefing on inland waterway safety.',
     categoryId: cat('government-policy'), providerRef: DEMO_YT, durationSeconds: 552, location: 'Marina, Lagos Island',
-    reporterName: 'Ngozi Fadipe', reporterId: person('Ngozi Fadipe').id, status: 'pending', createdAt: ago(2),
+    reporterName: 'Ngozi Fadipe', reporterId: personId('Ngozi Fadipe'), status: 'pending', createdAt: ago(2),
   })
   await db.insert(schema.submitterContacts).values({
     videoId: ojota.id, reference: 'EYE-7K2M9Q', name: 'Adebayo O.', email: 'adebayo@example.com', phone: '+234 800 000 0000', consentAt: ago(0.7),
   })
   await db.insert(schema.moderationReviews).values({
-    videoId: ojota.id, reviewerId: person('Chiamaka Obi').id, decision: 'flagged', notes: 'Possible duplicate of an existing report.', checklist: {},
+    videoId: ojota.id, reviewerId: personId('Chiamaka Obi'), decision: 'flagged', notes: 'Possible duplicate of an existing report.', checklist: {},
   })
 
   // A rejected item so the registry shows every state.
@@ -205,14 +220,14 @@ async function main() {
     categoryId: cat('community-voices'), source: 'citizen', reporterName: 'Citizen upload', status: 'rejected', createdAt: ago(30),
   })
 
-  await db.insert(schema.liveStream).values({
-    id: 1,
+  await db.update(schema.liveStream).set({
     title: 'Flood watch: live from Ajah',
     description: "Streaming from Eye Media's Ajah field desk as officials and volunteers coordinate access routes.",
     categoryId: cat('environment-sanitation'),
     youtubeVideoId: DEMO_YT,
     status: 'live',
     startedAt: ago(0.5),
+    updatedAt: new Date(),
   })
 
   // Schedule: next three slots relative to now, on the half hour.
@@ -223,18 +238,18 @@ async function main() {
     { startsAt: new Date(base.getTime() + 4 * HOUR), title: "Weekly wrap: this week's verified reports", categoryId: null },
   ])
 
-  const admin = staff[0]!
+  const admin = staff[0] ?? { id: null, name: 'Paxofi Technologies' }
   await db.insert(schema.auditLog).values([
-    { actorId: person('Chiamaka Obi').id, actorName: 'Chiamaka Obi', action: 'moderation.approved', targetType: 'video', targetLabel: published[0]!.title, notes: 'Cleared verification checklist', createdAt: ago(1) },
-    { actorId: person('Tunde Balogun').id, actorName: 'Tunde Balogun', action: 'video.created', targetType: 'video', targetId: danfo.id, targetLabel: danfo.title, createdAt: ago(0.2) },
-    { actorId: person('Chiamaka Obi').id, actorName: 'Chiamaka Obi', action: 'moderation.flagged', targetType: 'video', targetId: ojota.id, targetLabel: ojota.title, notes: 'Possible duplicate of an existing report', createdAt: ago(0.5) },
-    { actorId: person('Ngozi Fadipe').id, actorName: 'Ngozi Fadipe', action: 'live.started', targetType: 'live', targetId: '1', targetLabel: 'Flood watch: live from Ajah', createdAt: ago(0.5) },
-    { actorId: person('Chiamaka Obi').id, actorName: 'Chiamaka Obi', action: 'video.updated', targetType: 'video', targetId: alaba.id, targetLabel: alaba.title, notes: 'Marked as sensitive', createdAt: ago(0.9) },
+    { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'moderation.approved', targetType: 'video', targetLabel: published[0]!.title, notes: 'Cleared verification checklist', createdAt: ago(1) },
+    { actorId: personId('Tunde Balogun'), actorName: 'Tunde Balogun', action: 'video.created', targetType: 'video', targetId: danfo.id, targetLabel: danfo.title, createdAt: ago(0.2) },
+    { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'moderation.flagged', targetType: 'video', targetId: ojota.id, targetLabel: ojota.title, notes: 'Possible duplicate of an existing report', createdAt: ago(0.5) },
+    { actorId: personId('Ngozi Fadipe'), actorName: 'Ngozi Fadipe', action: 'live.started', targetType: 'live', targetId: '1', targetLabel: 'Flood watch: live from Ajah', createdAt: ago(0.5) },
+    { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'video.updated', targetType: 'video', targetId: alaba.id, targetLabel: alaba.title, notes: 'Marked as sensitive', createdAt: ago(0.9) },
     { actorId: admin.id, actorName: admin.name, action: 'user.created', targetType: 'user', targetLabel: 'editor@eyemedia.local', notes: 'Role: editor', createdAt: ago(200) },
   ])
 
-  console.log(`Seeded ${cats.length} categories, ${staff.length} staff users and demo content.`)
-  console.log(`Sign in at /admin/login as ${adminEmail} (or editor@/moderator@/producer@/reporter@eyemedia.local) with SEED_ADMIN_PASSWORD.`)
+  console.log(`Demo content loaded${staff.length ? ` with ${staff.length} demo staff logins` : ' (no logins created)'}.`)
+  if (staff.length) console.log(`Sign in at /admin/login as ${staff[0]!.email} (or editor@/moderator@/producer@/reporter@eyemedia.local) with SEED_ADMIN_PASSWORD.`)
   await pool.end()
 }
 

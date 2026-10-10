@@ -1,90 +1,106 @@
-# Deploying Eye TV on cPanel
+# Deploying Eye TV on cPanel — step by step
 
-Eye TV runs as a **Node.js application** under cPanel's *Setup Node.js App* (Phusion Passenger), with a
-**MySQL/MariaDB** database created in cPanel. Builds happen in GitHub Actions, not on the server, because shared hosts
-usually lack the memory to build Next.js.
+**Staging:** `https://eyetv.paxofi.com` (hidden from search engines)  ·  **Production:** the client's domain, later
 
-## 0. Check the hosting plan supports it
+Eye TV runs as a **Node.js 22** application under cPanel → *Setup Node.js App*, with a **MySQL/MariaDB** database.
+You never build on the server: every release is a ready-made **`eye-tv-release.zip`** that you upload and extract.
+The app updates its own database tables when it starts.
 
-In cPanel, look for **Software → Setup Node.js App**. You need:
-- **Node.js 20.9 or newer** (22 recommended) in the version list;
-- **MySQL 8 or MariaDB 10.6+** (*Databases → MySQL Databases*; the version is shown on the cPanel home screen);
-- ideally **SSH/Terminal** access (not required, but it makes the first admin easier to create).
+---
 
-If Node.js 20+ is not offered, ask the host to enable it (CloudLinux “Node.js Selector”) before going further.
+## Part A — One-time setup (first deployment only)
 
-## 1. Create the database
+### A1. Create the subdomain
 
-*MySQL Databases* → create a database (e.g. `cpuser_eyetv`) and a user with a strong password, then add the user to the
-database with **ALL PRIVILEGES**. Set the collation to `utf8mb4_unicode_ci` if your host offers the choice.
+1. cPanel → **Domains** → **Create A New Domain**.
+2. Domain: `eyetv.paxofi.com`. Untick “Share document root” and accept the suggested folder (it won't be used).
+3. Save. Then open **SSL/TLS Status**, tick `eyetv.paxofi.com`, and click **Run AutoSSL**. Wait until the padlock is green.
 
-## 2. Create the Node.js app
+### A2. Create the database
 
-*Setup Node.js App* → **Create application**:
+1. cPanel → **MySQL® Databases**.
+2. **Create New Database** called `eyetv`. cPanel adds your prefix, e.g. `cpuser_eyetv`. Write the full name down.
+3. **Add New User** called `eyetv` with a strong generated password, e.g. `cpuser_eyetv`. Write both down.
+4. **Add User To Database**: pick that user and database, then tick **ALL PRIVILEGES** → *Make Changes*.
+
+### A3. Create the Node.js application
+
+1. cPanel → **Setup Node.js App** → **Create Application**.
+2. Fill in:
 
 | Field | Value |
 |---|---|
-| Node.js version | 22.x (or the newest ≥ 20.9) |
-| Application mode | Production |
-| Application root | e.g. `eyetv-staging` (a folder in your home directory, **not** inside `public_html`) |
-| Application URL | the (sub)domain, e.g. `staging.eyetv.ng` |
+| Node.js version | **22.x** (the newest 22 offered) |
+| Application mode | **Production** |
+| Application root | `eyetv-staging` |
+| Application URL | `eyetv.paxofi.com` |
 | Application startup file | `app.js` |
 
-Add these **environment variables** in the same screen, then save:
+3. Under **Environment variables**, click **Add Variable** for each row:
 
 | Name | Value |
 |---|---|
-| `DATABASE_URL` | `mysql://DBUSER:URL-ENCODED-PASSWORD@localhost:3306/DBNAME` |
-| `SITE_URL` | `https://staging.eyetv.ng` (must be `https://` in production; it switches on secure cookies, HSTS and CSP upgrades) |
-| `IP_HASH_SECRET` | a long random string, e.g. the output of `openssl rand -base64 32` |
-| `DB_POOL_SIZE` | `5` (optional; lower it if the host limits MySQL connections) |
+| `DATABASE_URL` | `mysql://cpuser_eyetv:PASSWORD@localhost:3306/cpuser_eyetv`. If the password contains symbols such as `@ : / # ? &`, replace them with `%40 %3A %2F %23 %3F %26`. |
+| `SITE_URL` | `https://eyetv.paxofi.com` |
+| `SITE_INDEXING` | `false` (staging must stay out of Google) |
+| `IP_HASH_SECRET` | a long random string (40+ characters, e.g. from a password generator) |
 
-Do **not** press “Run NPM Install”. The release ships its own dependencies inside `server/`.
+4. Click **Create**. **Do not** click “Run NPM Install”: the release already contains everything it needs.
+5. Leave this page open. You'll come back to it.
 
-## 3. Upload a release
+### A4. Upload the first release — follow Part B below
 
-### Automatic (recommended): GitHub Actions → FTPS
+### A5. Create your admin login (no SSH needed)
 
-1. In cPanel, create an **FTP account** whose directory is the application root from step 2.
-2. In GitHub, go to repository → *Settings → Secrets and variables → Actions* and add:
-   `CPANEL_FTP_SERVER`, `CPANEL_FTP_USERNAME`, `CPANEL_FTP_PASSWORD`, and `CPANEL_APP_DIR` (use `/` if the FTP account is already rooted at the app folder).
-3. Every push to `main` that passes CI deploys to staging. You can also run *Actions → Deploy to cPanel staging → Run workflow* by hand.
+1. Back in **Setup Node.js App** → *Edit* (pencil) on the Eye TV app.
+2. Add two temporary variables: `EYE_ADMIN_EMAIL` = your email, and `EYE_ADMIN_NAME` = your name. Click **Save**.
+3. Scroll to **Run JS script**, choose **`eyetv:create-admin`**, and click **Run JS script**.
+4. The output window shows `Temporary password (shown once): …`. **Copy it now**, because it is not stored anywhere.
+5. **Delete** the two `EYE_ADMIN_*` variables and click **Save**.
+6. Open `https://eyetv.paxofi.com/admin/login`, sign in, and create the other staff accounts under **Staff Users**.
 
-### Manual
+> To reset a forgotten admin password later, repeat A5. Running it for an existing email resets that account's password.
 
-Run `npm run build:cpanel` locally and upload the contents of `release/` (or `release.zip`, then extract it) into the application root.
+### A6. (Staging only) Load the demo content for the owner
 
-Each release contains a fresh `tmp/restart.txt`. When it changes, Passenger restarts the app. On boot, `app.js`
-**applies any pending database migrations** before starting the server. If a migration fails, the app refuses to start and the error is written to the app's log
-(`stderr.log` in the application root).
+So the owner sees a full site, load the same demo stories as the prototype. This creates **no logins**.
 
-## 4. Create the first admin
+- **Run JS script** → **`eyetv:demo-content`**.
+- Before launch, remove it with **Run JS script** → **`eyetv:remove-demo`**. That deletes all videos, schedule entries, submissions and the audit log, but keeps staff accounts and categories.
+  Never run `eyetv:demo-content` on production.
 
-With SSH/Terminal, from the application root:
+---
 
-```bash
-cd ~/eyetv-staging/server
-source ~/nodevenv/eyetv-staging/22/bin/activate      # path shown at the top of the Node.js App page
-DATABASE_URL='mysql://…' node scripts/create-user.cjs --email you@eyemedia.ng --name "Your Name" --role admin
-```
+## Part B — Every deployment (upload a new release)
 
-The script prints a temporary password once. Sign in at `/admin/login`, then create the other staff accounts from **Staff Users**.
-(Without SSH, ask the developer to run the same command against the database from a trusted machine.)
+You'll receive **`eye-tv-release.zip`** from the developer. Every passing build on `main` also produces one under GitHub → *Actions* → *cPanel release package* → *Artifacts*.
 
-> Never run `db:seed` against staging or production. It loads demo content and refuses to run when `NODE_ENV=production`.
+1. cPanel → **File Manager** → open the application root folder **`eyetv-staging`**.
+2. **Keep a rollback copy:** if a folder called `server` exists, rename it to `server-previous`. First delete any older `server-previous`.
+3. Click **Upload**, select `eye-tv-release.zip`, and wait for 100%. Then go back to the folder.
+4. Right-click `eye-tv-release.zip` → **Extract** → extract into `/home/CPANELUSER/eyetv-staging` → **Extract Files**. Allow it to overwrite `app.js`, `package.json` and `tmp/restart.txt`.
+5. Delete `eye-tv-release.zip` from the server.
+6. **Setup Node.js App** → click **Restart** on the Eye TV app. (The new `tmp/restart.txt` usually triggers a restart on its own; the button makes sure.)
+7. **Check:** open `https://eyetv.paxofi.com/api/health`. It should show `{"status":"ok"}`. Then open the home page.
 
-## 5. Verify
+### If something goes wrong — roll back
 
-- `https://staging.eyetv.ng/api/health` should return `{"status":"ok"}`. Point an uptime monitor at it (for example UptimeRobot, free).
-- Turn on **AutoSSL** for the domain in cPanel *SSL/TLS Status*.
-- Make sure cPanel's daily **backups** include the database.
+1. File Manager: delete `server`, then rename `server-previous` back to `server`.
+2. **Restart** the app.
+3. Send the developer the last lines of **`stderr.log`** from the application root. If a database update fails, the app refuses to start, so the error will be in that file.
 
-## Known cPanel constraints
+---
 
-- **One process, in-memory rate limits.** Login and submission limits live in memory, which is fine for a single Passenger process. Before running several instances (for example on the future VPS), move them to Redis.
-- **Client IP.** Rate limiting relies on `X-Forwarded-For`, which Apache/Passenger normally set. If it's missing, submissions fall back to a site-wide cap instead of locking everyone out.
-- **Native module.** Password hashing uses `@node-rs/argon2` (prebuilt for Linux x64 glibc), which works on standard CloudLinux hosts. If the host is unusual (ARM or musl), tell the developer.
+## Part C — Moving from staging to the production domain (later)
 
-## Moving to a VPS later
+1. Repeat **A1–A3** with the production domain and a **new, separate database**. For example: application root `eyetv-production`, `SITE_URL=https://<production domain>`, **`SITE_INDEXING=true`**, and a new `IP_HASH_SECRET`.
+2. Upload the same release (**Part B**) and create the admin (**A5**). **Do not** load the demo content.
+3. Point an uptime monitor (e.g. UptimeRobot, free) at `https://<production domain>/api/health`.
+4. In cPanel **Backup**, confirm daily backups include the production database.
 
-Copy the same `release/` folder to the VPS and run `node app.js` behind Nginx, using pm2 or systemd. Set the same environment variables and point `DATABASE_URL` at the new MySQL server (a `mysqldump` / restore moves the data). No code changes are needed.
+## Requirements and limits (for reference)
+
+- Node.js **22+**, and MySQL 8 or MariaDB 10.6+.
+- One app process. Login and submission rate limits are kept in memory, which is fine on cPanel. Before running several processes on a VPS, they must move to Redis.
+- Password hashing uses a prebuilt Linux x64 module, which works on standard cPanel/CloudLinux servers.
+- **Moving to a VPS later:** copy the same release folder, run `node app.js` behind Nginx with pm2 or systemd, and set the same variables. The data moves with `mysqldump`. No code changes are needed.

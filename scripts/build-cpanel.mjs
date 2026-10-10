@@ -27,13 +27,13 @@ rmSync(path.join(server, '.env'), { force: true })
 // CLI scripts bundled to plain CommonJS so they run with the server's Node without tsx.
 // Native / heavy packages resolve from the standalone node_modules at runtime.
 mkdirSync(path.join(server, 'scripts'), { recursive: true })
-for (const name of ['migrate', 'create-user']) {
+for (const name of ['migrate', 'create-user', 'seed']) {
   await build({
     entryPoints: [path.join(root, 'scripts', `${name}.ts`)],
     outfile: path.join(server, 'scripts', `${name}.cjs`),
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'cjs',
     external: ['@node-rs/argon2', 'dotenv'],
     logLevel: 'warning',
@@ -48,7 +48,22 @@ writeFileSync(path.join(server, 'node_modules/dotenv/config.js'), '')
 cpSync(path.join(root, 'deploy/cpanel/app.js'), path.join(out, 'app.js'))
 writeFileSync(
   path.join(out, 'package.json'),
-  JSON.stringify({ name: 'eye-tv', private: true, main: 'app.js', engines: { node: '>=20.9' } }, null, 2) + '\n',
+  JSON.stringify(
+    {
+      name: 'eye-tv',
+      private: true,
+      main: 'app.js',
+      engines: { node: '>=22' },
+      // Shown under "Run JS script" in cPanel → Setup Node.js App (no SSH needed).
+      scripts: {
+        'eyetv:create-admin': 'node server/scripts/create-user.cjs --role admin',
+        'eyetv:demo-content': 'node server/scripts/seed.cjs --demo-content',
+        'eyetv:remove-demo': 'node server/scripts/seed.cjs --remove-demo',
+      },
+    },
+    null,
+    2,
+  ) + '\n',
 )
 // Passenger restarts the app whenever tmp/restart.txt changes, so every release carries a fresh one.
 mkdirSync(path.join(out, 'tmp'), { recursive: true })

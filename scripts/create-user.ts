@@ -3,6 +3,9 @@
  *
  *   npm run user:create -- --email you@eyemedia.ng --name "Your Name" --role admin
  *
+ * On cPanel without SSH: set EYE_ADMIN_EMAIL and EYE_ADMIN_NAME in Setup Node.js App, then use
+ * "Run JS script" → eyetv:create-admin. Remove those variables afterwards.
+ *
  * The password is read from the EYE_NEW_PASSWORD environment variable so it never lands in shell history
  * as an argument; if unset, a strong random password is generated and printed once.
  */
@@ -20,7 +23,13 @@ async function main() {
   })
   const generated = !process.env.EYE_NEW_PASSWORD
   const password = process.env.EYE_NEW_PASSWORD ?? randomBytes(18).toString('base64url')
-  const parsed = createUserSchema.parse({ ...values, title: values.title ?? '', password })
+  const parsed = createUserSchema.parse({
+    email: values.email ?? process.env.EYE_ADMIN_EMAIL,
+    name: values.name ?? process.env.EYE_ADMIN_NAME,
+    role: values.role,
+    title: values.title ?? '',
+    password,
+  })
 
   const { db, pool } = createDb(process.env.DATABASE_URL!, 1)
   const passwordHash = await hashPassword(parsed.password)
