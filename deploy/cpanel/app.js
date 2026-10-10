@@ -19,7 +19,7 @@ process.env.PORT = process.env.PORT || '3000'
 process.env.HOSTNAME = process.env.HOSTNAME || '127.0.0.1'
 
 const serverDir = path.join(__dirname, 'server')
-const { runMigrations } = require(path.join(serverDir, 'scripts', 'migrate.cjs'))
+const { runMigrations, describeError } = require(path.join(serverDir, 'scripts', 'migrate.cjs'))
 
 runMigrations(process.env.DATABASE_URL, path.join(serverDir, 'drizzle'))
   .then(() => {
@@ -27,6 +27,6 @@ runMigrations(process.env.DATABASE_URL, path.join(serverDir, 'drizzle'))
     require(path.join(serverDir, 'server.js'))
   })
   .catch((err) => {
-    console.error('[eye-tv] migration failed, refusing to start:', err)
+    console.error('[eye-tv] database setup failed, refusing to start:\n  ' + describeError(err))
     process.exit(1)
   })

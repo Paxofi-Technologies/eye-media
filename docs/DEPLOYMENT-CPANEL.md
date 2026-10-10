@@ -4,7 +4,9 @@
 
 Eye TV runs as a **Node.js 22** application under cPanel → *Setup Node.js App*, with a **MySQL/MariaDB** database.
 You never build on the server: every release is a ready-made **`eye-tv-release.zip`** that you upload and extract.
-The app updates its own database tables when it starts.
+
+> **There is no SQL file to import.** You only create an empty database (A2). The app creates and updates its own
+> tables when it starts, and so do the *Run JS script* commands, so the order you do things in doesn't matter.
 
 ---
 
@@ -14,7 +16,27 @@ The app updates its own database tables when it starts.
 
 1. cPanel → **Domains** → **Create A New Domain**.
 2. Domain: `eyetv.paxofi.com`. Untick “Share document root” and accept the suggested folder (it won't be used).
-3. Save. Then open **SSL/TLS Status**, tick `eyetv.paxofi.com`, and click **Run AutoSSL**. Wait until the padlock is green.
+3. Save, then give the subdomain an SSL certificate **before** opening it in a browser. See **A1b**.
+
+### A1b. SSL certificate (required, because paxofi.com goes through Cloudflare)
+
+`eyetv.paxofi.com` is **Proxied** (orange cloud) in Cloudflare, and Cloudflare connects to your server only over
+HTTPS with a valid certificate (SSL mode *Full (strict)*). Until the subdomain has a certificate on the cPanel side,
+visitors see **Cloudflare error 526 “Invalid SSL certificate”**. Pick **one** of the following:
+
+**Option 1 (recommended): Cloudflare Origin Certificate.** It works while proxied and lasts 15 years.
+1. Cloudflare dashboard → **paxofi.com** → **SSL/TLS** → **Origin Server** → **Create Certificate**.
+2. Keep “Generate private key and CSR with Cloudflare”, RSA. Hostnames: `eyetv.paxofi.com` (or `*.paxofi.com` to cover future subdomains). Validity: 15 years. Click **Create**.
+3. Keep that page open. You need both the **Origin Certificate** and the **Private Key** (shown only once).
+4. cPanel → **SSL/TLS** → **Manage SSL sites** → Domain: `eyetv.paxofi.com`. Paste the certificate into **Certificate (CRT)** and the key into **Private Key (KEY)** → **Install Certificate**.
+
+**Option 2: cPanel AutoSSL.**
+1. cPanel → **SSL/TLS Status** → tick `eyetv.paxofi.com` → **Run AutoSSL**.
+2. If it fails because of the proxy: in Cloudflare → **DNS**, set the `eyetv` record to **DNS only** (grey cloud), run AutoSSL again, wait for the green padlock, then switch the record back to **Proxied**.
+
+Also in Cloudflare, for this subdomain:
+- Keep the SSL/TLS mode at **Full (strict)**. Do **not** use *Flexible*: it sends traffic to your server unencrypted and causes redirect loops.
+- Turn **Rocket Loader off**: it rewrites scripts and breaks Eye TV's security policy (pages would load without interactivity). *Speed → Optimization → Content Optimization → Rocket Loader*, or a Configuration Rule for `eyetv.paxofi.com`.
 
 ### A2. Create the database
 
@@ -41,7 +63,7 @@ The app updates its own database tables when it starts.
 | Name | Value |
 |---|---|
 | `DATABASE_URL` | `mysql://cpuser_eyetv:PASSWORD@localhost:3306/cpuser_eyetv`. If the password contains symbols such as `@ : / # ? &`, replace them with `%40 %3A %2F %23 %3F %26`. |
-| `SITE_URL` | `https://eyetv.paxofi.com` |
+| `SITE_URL` | `https://eyetv.paxofi.com` (no slash at the end) |
 | `SITE_INDEXING` | `false` (staging must stay out of Google) |
 | `IP_HASH_SECRET` | a long random string (40+ characters, e.g. from a password generator) |
 
@@ -97,6 +119,21 @@ You'll receive **`eye-tv-release.zip`** from the developer. Every passing build 
 2. Upload the same release (**Part B**) and create the admin (**A5**). **Do not** load the demo content.
 3. Point an uptime monitor (e.g. UptimeRobot, free) at `https://<production domain>/api/health`.
 4. In cPanel **Backup**, confirm daily backups include the production database.
+
+## Troubleshooting
+
+| What you see | Cause | Fix |
+|---|---|---|
+| Cloudflare **526 Invalid SSL certificate** | No valid certificate for the subdomain on cPanel | **A1b** |
+| Cloudflare **521/522/523** | The Node.js app is stopped or crashed | *Setup Node.js App* → **Start App** / **Restart**; then read `stderr.log` in the application root |
+| *Run JS script* output says **Access denied for user** | Wrong user or password in `DATABASE_URL`, or the user isn't added to the database | Re-check **A2** step 4 and `DATABASE_URL` (encode special characters) |
+| Output says **Unknown database** | The database name in `DATABASE_URL` is missing the cPanel prefix | Use the full name, e.g. `cpuser_eyetv` |
+| Output says **ZodError … email / name** | `EYE_ADMIN_EMAIL` / `EYE_ADMIN_NAME` missing or invalid | Set both, click **Save**, run again |
+| Pages show but buttons/forms don't react | Cloudflare **Rocket Loader** is on | Turn it off (**A1b**) |
+| Links contain `//` | Old release with a trailing slash in `SITE_URL` | Remove the trailing slash, or upload the latest release |
+
+Every *Run JS script* command and the app itself print the real database error (with a code such as
+`ER_ACCESS_DENIED_ERROR`) instead of only “Failed query”. Copy that line when asking for help.
 
 ## Requirements and limits (for reference)
 

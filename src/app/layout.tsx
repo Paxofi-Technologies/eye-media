@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Montserrat } from 'next/font/google'
+import { siteUrl } from '@/lib/site'
 import '@/styles/tokens.css'
 import '@/styles/base.css'
 
@@ -11,7 +12,7 @@ const montserrat = Montserrat({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(siteUrl()),
   title: { default: 'Eye TV — A Clearer Tomorrow', template: '%s · Eye TV' },
   description:
     'Eye TV is the citizen-powered video newsroom of Eye Media Group: verified reports, live coverage and programmes from Lagos.',

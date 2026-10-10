@@ -7,11 +7,12 @@ import { verify } from '@node-rs/argon2'
 import { and, eq, gt, lt } from 'drizzle-orm'
 import { db, schema } from '@/db'
 import { hashPassword } from './password'
+import { isHttps } from './site'
 import { can, type Permission } from './rbac'
 import type { User } from '@/db/schema'
 
 // Secure cookies whenever the public URL is HTTPS (always the case in production).
-const SECURE = (process.env.SITE_URL ?? '').startsWith('https://')
+const SECURE = isHttps()
 // __Host- prefix pins the cookie to this exact origin over HTTPS (no Domain, Path=/).
 export const SESSION_COOKIE = SECURE ? '__Host-eye_session' : 'eye_session'
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000
@@ -98,8 +99,14 @@ export async function authorize(permission: Permission): Promise<SessionUser> {
 
 export async function clientIp(): Promise<string> {
   const h = await headers()
-  // Only trustworthy when the app runs behind a reverse proxy that sets these headers.
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip') || 'unknown'
+  // Behind Cloudflare the visitor's address is in CF-Connecting-IP; otherwise use the first
+  // X-Forwarded-For hop set by Apache/Passenger. Only used for rate limiting, never for authorisation.
+  return (
+    h.get('cf-connecting-ip')?.trim() ||
+    h.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    h.get('x-real-ip') ||
+    'unknown'
+  )
 }
 
 export function hashIp(ip: string) {

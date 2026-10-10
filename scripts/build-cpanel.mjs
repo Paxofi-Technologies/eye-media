@@ -56,6 +56,7 @@ writeFileSync(
       engines: { node: '>=22' },
       // Shown under "Run JS script" in cPanel → Setup Node.js App (no SSH needed).
       scripts: {
+        'eyetv:migrate': 'node server/scripts/migrate.cjs',
         'eyetv:create-admin': 'node server/scripts/create-user.cjs --role admin',
         'eyetv:demo-content': 'node server/scripts/seed.cjs --demo-content',
         'eyetv:remove-demo': 'node server/scripts/seed.cjs --remove-demo',

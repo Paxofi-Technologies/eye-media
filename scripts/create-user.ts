@@ -16,6 +16,7 @@ import { createDb } from '../src/db/client'
 import * as schema from '../src/db/schema'
 import { hashPassword } from '../src/lib/password'
 import { createUserSchema } from '../src/lib/validation'
+import { describeError, runMigrations } from './migrate'
 
 async function main() {
   const { values } = parseArgs({
@@ -31,7 +32,10 @@ async function main() {
     password,
   })
 
-  const { db, pool } = createDb(process.env.DATABASE_URL!, 1)
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set')
+  // Make sure the tables exist even if the app has never started yet.
+  await runMigrations(process.env.DATABASE_URL)
+  const { db, pool } = createDb(process.env.DATABASE_URL, 1)
   const passwordHash = await hashPassword(parsed.password)
   await db
     .insert(schema.users)
@@ -44,6 +48,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err instanceof Error ? err.message : err)
+  console.error(describeError(err))
   process.exit(1)
 })

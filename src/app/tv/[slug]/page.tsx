@@ -6,6 +6,7 @@ import { Player } from '@/components/tv/Player'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import { VerifiedBadge, VideoCard } from '@/components/tv/VideoCard'
 import { formatCount, formatDate, formatDuration, initials } from '@/lib/format'
+import { siteUrl as getSiteUrl } from '@/lib/site'
 import { SLUG_PATTERN } from '@/lib/slug'
 import { getPublishedVideo, getRelated, recordView } from '@/lib/tv'
 
@@ -38,7 +39,7 @@ export default async function VideoPage({ params }: { params: Promise<{ slug: st
   const [related] = await Promise.all([getRelated(video, 7), recordView(video.id)])
   const sidebar = related.slice(0, 3)
   const more = related.slice(3)
-  const siteUrl = process.env.SITE_URL ?? 'http://localhost:3000'
+  const siteUrl = getSiteUrl()
   const shareUrl = `${siteUrl}/tv/${video.slug}`
   const image = thumbnailFor(video)
 

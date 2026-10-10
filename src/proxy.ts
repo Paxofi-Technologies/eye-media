@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isHttps } from '@/lib/site'
 
 const SESSION_COOKIES = ['eye_session', '__Host-eye_session']
 
 // Read at runtime so one build serves staging and production.
 // Only upgrade sub-resources / send HSTS when the site is actually served over HTTPS.
-const HTTPS = (process.env.SITE_URL ?? '').startsWith('https://')
+const HTTPS = isHttps()
 // Search engines may index the site only when explicitly enabled (production). Staging stays hidden.
-const INDEXING = process.env.SITE_INDEXING === 'true'
+const INDEXING = process.env.SITE_INDEXING?.trim() === 'true'
 
 function contentSecurityPolicy(nonce: string) {
   const dev = process.env.NODE_ENV === 'development'

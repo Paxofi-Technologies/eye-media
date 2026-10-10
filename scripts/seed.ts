@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm'
 import { createDb } from '../src/db/client'
 import * as schema from '../src/db/schema'
 import { hashPassword } from '../src/lib/password'
+import { describeError, runMigrations } from './migrate'
 
 const DEMO_YT = 'SlbyzVMQ44w' // public clip used by the prototype to demonstrate playback
 
@@ -32,7 +33,10 @@ async function main() {
     throw new Error('In production use --demo-content (no logins are created) or --remove-demo.')
   }
 
-  const { db, pool } = createDb(process.env.DATABASE_URL!, 1)
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set')
+  // Make sure the tables (and categories) exist even if the app has never started yet.
+  await runMigrations(process.env.DATABASE_URL)
+  const { db, pool } = createDb(process.env.DATABASE_URL, 1)
 
   const clearContent = async (alsoStaff: boolean) => {
     await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`)
@@ -254,6 +258,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err)
+  console.error(describeError(err))
   process.exit(1)
 })
