@@ -1,0 +1,71 @@
+name: Deploy to cPanel staging
+
+# Builds the cPanel release and uploads it over FTPS to the staging Node.js app.
+# Requires repository secrets (Settings → Secrets and variables → Actions):
+#   CPANEL_FTP_SERVER    e.g. ftp.eyemedia.ng
+#   CPANEL_FTP_USERNAME  an FTP account scoped to the staging app directory
+#   CPANEL_FTP_PASSWORD
+#   CPANEL_APP_DIR       remote path of the Node.js application root, ending in "/", e.g. eyetv-staging/
+# Runtime configuration (DATABASE_URL, SITE_URL, IP_HASH_SECRET) is set in cPanel → Setup Node.js App,
+# never in this repository.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Only deploy commits whose CI passed (or manual runs).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - name: Check deploy credentials are configured
+        id: creds
+        env:
+          SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
+        run: |
+          if [ -z "$SERVER" ]; then
+            echo "::warning::cPanel FTP secrets are not configured yet; skipping deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.creds.outputs.ready == 'true'
+      - name: Build cPanel release
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build:cpanel
+      - name: Upload over FTPS
+        if: steps.creds.outputs.ready == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.CPANEL_FTP_SERVER }}
+          username: ${{ secrets.CPANEL_FTP_USERNAME }}
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./release/
+          server-dir: ${{ secrets.CPANEL_APP_DIR }}
+          # tmp/restart.txt is always new, so Passenger restarts and runs migrations on boot.

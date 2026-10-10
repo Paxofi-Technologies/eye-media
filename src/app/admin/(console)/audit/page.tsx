@@ -1,0 +1,107 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { z } from 'zod'
+import { Restricted } from '@/components/admin/Restricted'
+import { AUDIT_PAGE_SIZE, listAudit, listStaff } from '@/lib/admin'
+import { AUDIT_LABELS, type AuditAction } from '@/lib/audit'
+import { requireStaff } from '@/lib/auth'
+import { formatDateTime } from '@/lib/format'
+import { can } from '@/lib/rbac'
+
+export const metadata: Metadata = { title: 'Audit & History' }
+
+type Search = { actor?: string; action?: string; q?: string; page?: string }
+
+export default async function AuditPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const user = await requireStaff()
+  if (!can(user.role, 'audit.view')) {
+    return <Restricted title="Editor access required">Only editors and administrators can view the audit trail.</Restricted>
+  }
+  const sp = await searchParams
+  const actorId = z.uuid().safeParse(sp.actor).success ? sp.actor! : null
+  const action = sp.action && sp.action in AUDIT_LABELS ? sp.action : null
+  const q = (sp.q ?? '').slice(0, 100)
+  const page = Math.max(1, Number.parseInt(sp.page ?? '', 10) || 1)
+
+  const [{ rows, total }, staff] = await Promise.all([listAudit({ actorId, action, q, page }), listStaff()])
+  const pages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
+  const href = (p: number) => {
+    const params = new URLSearchParams()
+    if (actorId) params.set('actor', actorId)
+    if (action) params.set('action', action)
+    if (q) params.set('q', q)
+    params.set('page', String(p))
+    return `/admin/audit?${params}`
+  }
+
+  return (
+    <>
+      <div className="admin-topbar">
+        <div>
+          <h1>Audit &amp; History</h1>
+          <div className="sub">Every moderation decision, publish, edit and sign-in — who did it and when.</div>
+        </div>
+      </div>
+      <form className="table-toolbar" method="get" action="/admin/audit">
+        <label className="visually-hidden" htmlFor="aa">Actor</label>
+        <select id="aa" name="actor" defaultValue={actorId ?? ''}>
+          <option value="">All actors</option>
+          {staff.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <label className="visually-hidden" htmlFor="ac">Action</label>
+        <select id="ac" name="action" defaultValue={action ?? ''}>
+          <option value="">All actions</option>
+          {Object.entries(AUDIT_LABELS).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </select>
+        <label className="visually-hidden" htmlFor="aq">Search</label>
+        <input id="aq" type="search" name="q" defaultValue={q} placeholder="Search audit log…" maxLength={100} />
+        <button className="btn btn-ghost btn-sm" type="submit">Filter</button>
+      </form>
+      {rows.length === 0 ? (
+        <div className="empty-state"><h3>No matching activity</h3><p>Try clearing the filters.</p></div>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">When</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Action</th>
+                <th scope="col">Target</th>
+                <th scope="col">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.createdAt)}</td>
+                  <td>{r.actorName}</td>
+                  <td>{AUDIT_LABELS[r.action as AuditAction] ?? r.action}</td>
+                  <td>
+                    {r.targetType === 'video' && r.targetId ? (
+                      <Link href={`/admin/videos/${r.targetId}`}>{r.targetLabel ?? r.targetId}</Link>
+                    ) : (
+                      r.targetLabel ?? '—'
+                    )}
+                  </td>
+                  <td className="cell-sub">{r.notes ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {pages > 1 && (
+        <nav className="table-toolbar" style={{ justifyContent: 'center', marginTop: 20 }} aria-label="Pagination">
+          {page > 1 && <Link className="btn btn-ghost btn-sm" href={href(page - 1)}>← Newer</Link>}
+          <span className="cell-sub">Page {page} of {pages}</span>
+          {page < pages && <Link className="btn btn-ghost btn-sm" href={href(page + 1)}>Older →</Link>}
+        </nav>
+      )}
+    </>
+  )
+}
