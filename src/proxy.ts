@@ -20,6 +20,7 @@ function contentSecurityPolicy(nonce: string) {
     `font-src 'self'`,
     `connect-src 'self'${dev ? ' ws:' : ''}`,
     `frame-src https://www.youtube-nocookie.com`,
+    `media-src 'self' blob:`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
@@ -61,7 +62,7 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: '/((?!api|_next/static|_next/image|favicon.ico|icon.svg|robots.txt|sitemap.xml).*)',
+      source: '/((?!api|media|_next/static|_next/image|favicon.ico|icon.svg|robots.txt|sitemap.xml).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },

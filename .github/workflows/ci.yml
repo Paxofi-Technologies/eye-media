@@ -35,6 +35,7 @@ jobs:
       IP_HASH_SECRET: ci-only-not-a-secret-0123456789abcdef
       SEED_ADMIN_EMAIL: admin@eyemedia.local
       SEED_ADMIN_PASSWORD: ci-only-Passw0rd!
+      MEDIA_DIR: /tmp/eyetv-media
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4

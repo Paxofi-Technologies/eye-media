@@ -22,6 +22,7 @@ export async function getQueue() {
       source: videos.source,
       sensitive: videos.sensitive,
       reporterName: videos.reporterName,
+      provider: videos.provider,
       providerRef: videos.providerRef,
       thumbnailUrl: videos.thumbnailUrl,
       createdAt: videos.createdAt,
@@ -88,7 +89,7 @@ export async function getVideoStats() {
   return by
 }
 
-export const REGISTRY_PAGE_SIZE = 25
+export const REGISTRY_PAGE_SIZE = 10
 
 export async function listVideos(params: { q: string; categoryId: string | null; status: VideoStatus | null; page: number }) {
   const conds: SQL[] = []
@@ -108,6 +109,7 @@ export async function listVideos(params: { q: string; categoryId: string | null;
         title: videos.title,
         status: videos.status,
         source: videos.source,
+        provider: videos.provider,
         providerRef: videos.providerRef,
         thumbnailUrl: videos.thumbnailUrl,
         reporterName: videos.reporterName,
@@ -165,7 +167,7 @@ export async function getLiveEventForStaff(id: string) {
   return row ?? null
 }
 
-export const AUDIT_PAGE_SIZE = 50
+export const AUDIT_PAGE_SIZE = 10
 
 export async function listAudit(params: { actorId: string | null; action: string | null; q: string; page: number }) {
   const conds: SQL[] = []

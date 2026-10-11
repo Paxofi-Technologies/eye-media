@@ -2,10 +2,12 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { z } from 'zod'
 import { Restricted } from '@/components/admin/Restricted'
+import { Pagination } from '@/components/Pagination'
 import { AUDIT_PAGE_SIZE, listAudit, listStaff } from '@/lib/admin'
 import { AUDIT_LABELS, type AuditAction } from '@/lib/audit'
 import { requireStaff } from '@/lib/auth'
 import { formatDateTime } from '@/lib/format'
+import { parsePage } from '@/lib/pagination'
 import { can } from '@/lib/rbac'
 
 export const metadata: Metadata = { title: 'Audit & History' }
@@ -21,7 +23,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const actorId = z.uuid().safeParse(sp.actor).success ? sp.actor! : null
   const action = sp.action && sp.action in AUDIT_LABELS ? sp.action : null
   const q = (sp.q ?? '').slice(0, 100)
-  const page = Math.max(1, Number.parseInt(sp.page ?? '', 10) || 1)
+  const page = parsePage(sp.page)
 
   const [{ rows, total }, staff] = await Promise.all([listAudit({ actorId, action, q, page }), listStaff()])
   const pages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
@@ -95,12 +97,11 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           </table>
         </div>
       )}
-      {pages > 1 && (
-        <nav className="table-toolbar" style={{ justifyContent: 'center', marginTop: 20 }} aria-label="Pagination">
-          {page > 1 && <Link className="btn btn-ghost btn-sm" href={href(page - 1)}>← Newer</Link>}
-          <span className="cell-sub">Page {page} of {pages}</span>
-          {page < pages && <Link className="btn btn-ghost btn-sm" href={href(page + 1)}>Older →</Link>}
-        </nav>
+      <Pagination page={page} pages={pages} href={href} label="Audit log pages" />
+      {total > 0 && (
+        <p className="cell-sub" style={{ textAlign: 'center', marginTop: 10 }}>
+          Showing {(page - 1) * AUDIT_PAGE_SIZE + 1}–{Math.min(page * AUDIT_PAGE_SIZE, total)} of {total}
+        </p>
       )}
     </>
   )

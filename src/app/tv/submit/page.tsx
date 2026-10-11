@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { getCategories } from '@/lib/tv'
+import { uploadsEnabled } from '@/lib/uploads'
 import { SubmitForm } from './SubmitForm'
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default async function SubmitPage() {
         Eye TV is powered by people like you. Tell us what is happening in your community — an editor will review it,
         may contact you to verify details, and will publish it if it meets our standards.
       </p>
-      <SubmitForm categories={categories.map((c) => ({ slug: c.slug, name: c.name }))} />
+      <SubmitForm categories={categories.map((c) => ({ slug: c.slug, name: c.name }))} uploadsEnabled={uploadsEnabled()} />
     </div>
   )
 }

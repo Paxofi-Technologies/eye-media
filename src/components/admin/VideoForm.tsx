@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { saveVideo, type ActionState } from '@/app/admin/actions'
 import { Field } from '@/components/Field'
+import { VideoUpload } from '@/components/VideoUpload'
 import { formatDuration } from '@/lib/format'
 
 export type VideoFormValues = {
@@ -12,6 +13,7 @@ export type VideoFormValues = {
   summary: string | null
   description: string | null
   categoryId: string | null
+  provider: 'youtube' | 'upload'
   providerRef: string | null
   durationSeconds: number | null
   location: string | null
@@ -27,10 +29,14 @@ export function VideoForm({
   initial,
   categories,
   canEdit,
+  uploadsEnabled,
+  currentUploadName = null,
 }: {
   initial: VideoFormValues | null
   categories: { id: string; name: string }[]
   canEdit: boolean
+  uploadsEnabled: boolean
+  currentUploadName?: string | null
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveVideo, { ok: false, message: null })
   const e = state.errors ?? {}
@@ -85,9 +91,38 @@ export function VideoForm({
 
         <div className="form-panel">
           <h2>Video</h2>
+          {uploadsEnabled && canEdit && (
+            <VideoUpload
+              purpose="staff"
+              label={v?.provider === 'upload' ? 'Replace the uploaded video' : 'Upload a video file'}
+              current={v?.provider === 'upload' ? (currentUploadName ?? 'uploaded video') : null}
+            />
+          )}
+          {e.upload && (
+            <div className="field-error" role="alert" style={{ marginTop: -8, marginBottom: 12 }}>
+              {e.upload}
+            </div>
+          )}
           <div className="field-row">
-            <Field id="youtube" label="YouTube video" hint="Video id or any YouTube URL from the Eye TV channel." error={e.youtube}>
-              {(p) => <input {...p} name="youtube" maxLength={200} defaultValue={v?.providerRef ?? ''} placeholder="https://youtu.be/…" />}
+            <Field
+              id="youtube"
+              label={uploadsEnabled ? 'Or a YouTube video' : 'YouTube video'}
+              hint={
+                v?.provider === 'upload'
+                  ? 'Leave empty to keep the uploaded file. Entering a YouTube link replaces it.'
+                  : 'Video id or any YouTube URL from the Eye TV channel.'
+              }
+              error={e.youtube}
+            >
+              {(p) => (
+                <input
+                  {...p}
+                  name="youtube"
+                  maxLength={200}
+                  defaultValue={v?.provider === 'youtube' ? (v.providerRef ?? '') : ''}
+                  placeholder="https://youtu.be/…"
+                />
+              )}
             </Field>
             <Field id="duration" label="Duration" hint="m:ss or h:mm:ss" error={e.duration}>
               {(p) => <input {...p} name="duration" maxLength={12} defaultValue={formatDuration(v?.durationSeconds) ?? ''} />}

@@ -29,6 +29,13 @@
       "when": 1791755865794,
       "tag": "0003_copy_legacy_live_data",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791758997356,
+      "tag": "0004_media_uploads",
+      "breakpoints": true
     }
   ]
 }

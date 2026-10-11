@@ -6,6 +6,7 @@ import { Restricted } from '@/components/admin/Restricted'
 import { ReviewForm } from '@/components/admin/ReviewForm'
 import { StatusPill } from '@/components/admin/StatusPill'
 import { Player } from '@/components/tv/Player'
+import { mediaSource } from '@/lib/media'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import { getModerationHistory, getQueue, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
@@ -99,7 +100,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
 
         {v && selected ? (
           <section className="review-panel" aria-label="Review">
-            <Player youtubeId={v.providerRef} title={v.title} />
+            <Player {...mediaSource(v.provider, v.providerRef)} title={v.title} />
             <h2>{v.title}</h2>
             <div className="kv-row">
               <span className="k">Status</span>
@@ -158,7 +159,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
                 canPublish={!!v.providerRef && !!v.categoryId}
                 publishHint={
                   !v.providerRef
-                    ? 'Before approving, upload the footage to the Eye TV YouTube channel and attach it via "Edit video".'
+                    ? 'Before approving, attach the video (upload the file or add a YouTube link) via "Edit video".'
                     : null
                 }
               />

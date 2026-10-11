@@ -5,6 +5,7 @@ import { VideoForm } from '@/components/admin/VideoForm'
 import { requireStaff } from '@/lib/auth'
 import { can } from '@/lib/rbac'
 import { getCategories } from '@/lib/tv'
+import { uploadsEnabled } from '@/lib/uploads'
 
 export const metadata: Metadata = { title: 'New video' }
 
@@ -24,7 +25,7 @@ export default async function NewVideoPage() {
         <Link className="btn btn-ghost" href="/admin/videos">Cancel</Link>
       </div>
       <div style={{ maxWidth: 820 }}>
-        <VideoForm initial={null} categories={categories} canEdit />
+        <VideoForm initial={null} categories={categories} canEdit uploadsEnabled={uploadsEnabled()} />
       </div>
     </>
   )

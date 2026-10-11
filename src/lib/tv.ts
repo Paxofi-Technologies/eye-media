@@ -11,6 +11,7 @@ const cardColumns = {
   slug: videos.slug,
   title: videos.title,
   summary: videos.summary,
+  provider: videos.provider,
   providerRef: videos.providerRef,
   thumbnailUrl: videos.thumbnailUrl,
   durationSeconds: videos.durationSeconds,
@@ -26,6 +27,7 @@ export type VideoCard = {
   slug: string
   title: string
   summary: string | null
+  provider: 'youtube' | 'upload'
   providerRef: string | null
   thumbnailUrl: string | null
   durationSeconds: number | null
@@ -131,7 +133,7 @@ export async function getRelated(video: { id: string; categoryId: string | null 
 
 export const DATE_RANGES = { '7d': 7, '30d': 30, all: null } as const
 export type DateRange = keyof typeof DATE_RANGES
-export const PAGE_SIZE = 12
+export const PAGE_SIZE = 10
 
 export async function searchVideos(params: {
   q: string

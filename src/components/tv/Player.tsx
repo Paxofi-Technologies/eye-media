@@ -11,16 +11,28 @@ import { PlayIcon } from './PlayIcon'
  */
 export function Player({
   youtubeId,
+  uploadId = null,
   title,
   live,
   viewers,
 }: {
   youtubeId: string | null
+  /** A video uploaded to Eye TV: played with the browser's own player from /media/<id>. */
+  uploadId?: string | null
   title: string
   live?: boolean
   viewers?: string | null
 }) {
   const [playing, setPlaying] = useState(false)
+
+  if (uploadId) {
+    return (
+      <div className="player">
+        {/* preload="metadata" fetches only the first bytes until the viewer presses play. */}
+        <video src={`/media/${uploadId}`} controls playsInline preload="metadata" aria-label={title} />
+      </div>
+    )
+  }
 
   return (
     <div className="player">

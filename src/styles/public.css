@@ -48,7 +48,8 @@ a.card:hover .play, a.card:focus-visible .play { opacity: 1; }
 .player > button.poster { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; color: inherit; }
 .player > button.poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .player > button.poster .play { opacity: 1; background: rgba(0, 0, 0, 0.25); }
-.player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.player iframe, .player video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.player video { background: #000; object-fit: contain; }
 .player .overlay-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 2; pointer-events: none; }
 .player .viewers { font-size: 0.75rem; font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.6); padding: 4px 9px; }
 .player .unavailable { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--fg-mid); font-weight: 600; font-size: 0.9rem; text-align: center; padding: 20px; }
@@ -114,7 +115,6 @@ a.card:hover h3 { text-decoration: underline; text-decoration-thickness: 2px; te
 .search-input { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--fg); padding: 12px 14px; font-size: 0.95rem; font-family: inherit; font-weight: 500; }
 .search-input:focus { outline: 2px solid var(--bright-red); outline-offset: 1px; border-color: var(--bright-red); }
 .result-count { color: var(--fg-lo); font-size: 0.84rem; font-weight: 600; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.02em; }
-.pagination { display: flex; gap: 8px; justify-content: center; align-items: center; margin-top: 30px; font-size: 0.85rem; color: var(--fg-lo); }
 
 /* ---------- video detail ---------- */
 .video-layout { display: grid; grid-template-columns: 1fr 320px; gap: 30px; align-items: start; padding-top: 30px; }

@@ -3,11 +3,13 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { z } from 'zod'
 import { STATUS_OPTIONS, StatusPill } from '@/components/admin/StatusPill'
+import { Pagination } from '@/components/Pagination'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import type { VideoStatus } from '@/db/schema'
 import { REGISTRY_PAGE_SIZE, getLiveCount, getVideoStats, listVideos } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatCount, timeAgo } from '@/lib/format'
+import { parsePage } from '@/lib/pagination'
 import { can } from '@/lib/rbac'
 import { getCategories } from '@/lib/tv'
 
@@ -21,7 +23,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
   const q = (sp.q ?? '').slice(0, 100)
   const categoryId = z.uuid().safeParse(sp.category).success ? sp.category! : null
   const status = STATUS_OPTIONS.some(([s]) => s === sp.status) ? (sp.status as VideoStatus) : null
-  const page = Math.max(1, Number.parseInt(sp.page ?? '', 10) || 1)
+  const page = parsePage(sp.page)
 
   const [stats, categories, liveCount, { rows, total }] = await Promise.all([
     getVideoStats(),
@@ -122,7 +124,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
                           <div className="cell-title">
                             <Link href={`/admin/videos/${r.id}`}>{r.title}</Link>
                           </div>
-                          <div className="cell-sub">YT: {r.providerRef ?? '—'}{r.source === 'citizen' ? ' · citizen' : ''}</div>
+                          <div className="cell-sub">{r.provider === 'upload' ? 'File upload' : `YT: ${r.providerRef ?? '—'}`}{r.source === 'citizen' ? ' · citizen' : ''}</div>
                         </div>
                       </div>
                     </td>
@@ -138,12 +140,11 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
           </table>
         </div>
       )}
-      {pages > 1 && (
-        <nav className="table-toolbar" style={{ justifyContent: 'center', marginTop: 20 }} aria-label="Pagination">
-          {page > 1 && <Link className="btn btn-ghost btn-sm" href={href(page - 1)}>← Previous</Link>}
-          <span className="cell-sub">Page {page} of {pages}</span>
-          {page < pages && <Link className="btn btn-ghost btn-sm" href={href(page + 1)}>Next →</Link>}
-        </nav>
+      <Pagination page={page} pages={pages} href={href} label="Video registry pages" />
+      {total > 0 && (
+        <p className="cell-sub" style={{ textAlign: 'center', marginTop: 10 }}>
+          Showing {(page - 1) * REGISTRY_PAGE_SIZE + 1}–{Math.min(page * REGISTRY_PAGE_SIZE, total)} of {total}
+        </p>
       )}
     </>
   )

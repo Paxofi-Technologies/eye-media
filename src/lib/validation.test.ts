@@ -20,6 +20,11 @@ describe('submissionSchema', () => {
     expect(r.success).toBe(true)
     if (r.success) expect(r.data.mediaUrl).toBeNull()
   })
+  it('gives a friendly message when no category is chosen', () => {
+    const r = submissionSchema.safeParse({ ...validSubmission, category: undefined })
+    expect(r.success).toBe(false)
+    if (!r.success) expect(r.error.issues.find((i) => i.path[0] === 'category')?.message).toBe('Choose a category.')
+  })
   it('requires consent', () => {
     expect(submissionSchema.safeParse({ ...validSubmission, consent: undefined }).success).toBe(false)
   })

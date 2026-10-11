@@ -41,7 +41,8 @@ export const submissionSchema = z
       .trim()
       .min(20, 'Describe what happened in a little more detail (20+ characters).')
       .max(4000),
-    category: z.string().trim().regex(SLUG_PATTERN, 'Choose a category.'),
+    // An unselected <select> with a disabled placeholder isn't submitted at all, hence the custom error.
+    category: z.string({ error: 'Choose a category.' }).trim().regex(SLUG_PATTERN, 'Choose a category.'),
     location: z.string().trim().min(2, 'Tell us where this happened.').max(160),
     mediaUrl: z
       .string()

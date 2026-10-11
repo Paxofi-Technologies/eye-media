@@ -7,6 +7,7 @@ import { recordAudit } from '@/lib/audit'
 import { clientIp, hashIp } from '@/lib/auth'
 import { submissionReference, slugSuffix } from '@/lib/ids'
 import { RateLimiter } from '@/lib/rate-limit'
+import { claimUpload } from '@/lib/uploads'
 import { videoSlug } from '@/lib/slug'
 import { fieldErrors, formToObject, submissionSchema, type FieldErrors } from '@/lib/validation'
 import { parseYouTubeId } from '@/lib/youtube'
@@ -27,6 +28,8 @@ export async function submitStory(_prev: SubmitState, form: FormData): Promise<S
   const echo = { ...values }
   delete echo.consent
   delete echo.website
+  delete echo.uploadId
+  delete echo.uploadToken
 
   const parsed = submissionSchema.safeParse(values)
   if (!parsed.success) {
@@ -59,6 +62,18 @@ export async function submitStory(_prev: SubmitState, form: FormData): Promise<S
     return { status: 'error', message: 'Please fix the highlighted fields.', errors: { category: 'Choose a category.' }, values: echo }
   }
 
+  // A video uploaded from the device (optional). It must be a finished citizen upload with its token.
+  const uploadId = typeof values.uploadId === 'string' && values.uploadId ? values.uploadId : null
+  const upload = uploadId ? await claimUpload(uploadId, values.uploadToken, 'citizen') : null
+  if (uploadId && !upload) {
+    return {
+      status: 'error',
+      message: 'Your video upload did not finish. Please upload it again.',
+      errors: { upload: 'Upload the video again, then send.' },
+      values: echo,
+    }
+  }
+
   const reference = submissionReference()
   const video = { id: randomUUID(), title: data.title }
   await db.transaction(async (tx) => {
@@ -70,8 +85,10 @@ export async function submitStory(_prev: SubmitState, form: FormData): Promise<S
         description: data.description,
         categoryId: category.id,
         source: 'citizen',
-        // A YouTube link can be previewed safely by staff; any other link is kept for manual review only.
-        providerRef: parseYouTubeId(data.mediaUrl),
+        // An uploaded file is stored privately until published. A YouTube link can be previewed safely by
+        // staff; any other link is kept for manual review only.
+        provider: upload ? 'upload' : 'youtube',
+        providerRef: upload ? upload.id : parseYouTubeId(data.mediaUrl),
         submittedMediaUrl: data.mediaUrl,
         location: data.location,
         reporterName: data.name,

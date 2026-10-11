@@ -6,12 +6,14 @@ import { changeVideoStatus } from '@/app/admin/actions'
 import { StatusPill } from '@/components/admin/StatusPill'
 import { VideoForm } from '@/components/admin/VideoForm'
 import { Player } from '@/components/tv/Player'
+import { mediaSource } from '@/lib/media'
 import type { VideoStatus } from '@/db/schema'
 import { getModerationHistory, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatCount, formatDateTime } from '@/lib/format'
 import { can } from '@/lib/rbac'
 import { getCategories } from '@/lib/tv'
+import { getUploadMeta, uploadsEnabled } from '@/lib/uploads'
 
 export const metadata: Metadata = { title: 'Edit video' }
 
@@ -42,10 +44,11 @@ export default async function EditVideoPage({
   const sp = await searchParams
   const v = row.video
 
-  const [categories, history, contact] = await Promise.all([
+  const [categories, history, contact, uploadMeta] = await Promise.all([
     getCategories(),
     getModerationHistory(v.id),
     v.source === 'citizen' && can(user.role, 'submission.contact.view') ? getSubmitterContact(v.id) : null,
+    v.provider === 'upload' && v.providerRef ? getUploadMeta(v.providerRef) : null,
   ])
   const canEdit = can(user.role, 'video.edit')
   const canPublish = can(user.role, 'video.publish')
@@ -74,12 +77,14 @@ export default async function EditVideoPage({
           initial={{ ...v, slug: v.slug }}
           categories={categories}
           canEdit={canEdit}
+          uploadsEnabled={uploadsEnabled()}
+          currentUploadName={uploadMeta?.originalName ?? null}
         />
 
         <div>
           <div className="form-panel">
             <h2>Preview</h2>
-            <Player youtubeId={v.providerRef} title={v.title} />
+            <Player {...mediaSource(v.provider, v.providerRef)} title={v.title} />
             {v.status === 'published' && (
               <p style={{ marginBottom: 0 }}>
                 <Link className="link-btn" href={`/tv/${v.slug}`} target="_blank">

@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { useActionState } from 'react'
 import { Field } from '@/components/Field'
+import { VideoUpload } from '@/components/VideoUpload'
 import { submitStory, type SubmitState } from './actions'
 
-export function SubmitForm({ categories }: { categories: { slug: string; name: string }[] }) {
+export function SubmitForm({ categories, uploadsEnabled }: { categories: { slug: string; name: string }[]; uploadsEnabled: boolean }) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitStory, { status: 'idle' })
 
   if (state.status === 'success') {
@@ -62,10 +63,16 @@ export function SubmitForm({ categories }: { categories: { slug: string; name: s
             {(p) => <input {...p} name="location" required maxLength={160} defaultValue={v.location} />}
           </Field>
         </div>
+        {uploadsEnabled && <VideoUpload purpose="citizen" label="Your video (optional)" />}
+        {errors.upload && (
+          <div className="field-error" role="alert" style={{ marginTop: -8, marginBottom: 12 }}>
+            {errors.upload}
+          </div>
+        )}
         <Field
           id="mediaUrl"
-          label="Link to your video (optional)"
-          hint="A YouTube, Google Drive or similar https:// link. Direct video upload is coming soon."
+          label={uploadsEnabled ? 'Or paste a link to your video (optional)' : 'Link to your video (optional)'}
+          hint="A YouTube, Google Drive or similar https:// link."
           error={errors.mediaUrl}
         >
           {(p) => <input {...p} name="mediaUrl" type="url" inputMode="url" maxLength={500} defaultValue={v.mediaUrl} />}

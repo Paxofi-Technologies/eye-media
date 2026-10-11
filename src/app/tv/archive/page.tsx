@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Pagination } from '@/components/Pagination'
 import { VideoCard } from '@/components/tv/VideoCard'
+import { parsePage } from '@/lib/pagination'
 import { DATE_RANGES, PAGE_SIZE, getCategories, searchVideos, type DateRange } from '@/lib/tv'
 
 export const metadata: Metadata = {
@@ -23,7 +25,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
   const categories = await getCategories()
   const validSlugs = new Set(categories.map((c) => c.slug))
   const selected = list(sp.category).filter((s) => validSlugs.has(s))
-  const page = Math.max(1, Math.min(500, Number.parseInt(first(sp.page), 10) || 1))
+  const page = parsePage(sp.page)
 
   const { rows, total } = await searchVideos({ q, categories: selected, verifiedOnly, range, page })
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -122,23 +124,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                 ))}
               </div>
             )}
-            {pages > 1 && (
-              <nav className="pagination" aria-label="Pagination">
-                {page > 1 && (
-                  <Link className="btn btn-ghost btn-sm" href={pageHref(page - 1)}>
-                    ← Newer
-                  </Link>
-                )}
-                <span>
-                  Page {page} of {pages}
-                </span>
-                {page < pages && (
-                  <Link className="btn btn-ghost btn-sm" href={pageHref(page + 1)}>
-                    Older →
-                  </Link>
-                )}
-              </nav>
-            )}
+            <Pagination page={page} pages={pages} href={pageHref} label="Archive pages" />
           </div>
         </div>
       </form>

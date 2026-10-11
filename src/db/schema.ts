@@ -14,6 +14,7 @@ import {
   text,
   boolean,
   int,
+  bigint,
   datetime,
   index,
   uniqueIndex,
@@ -77,6 +78,8 @@ export const videoCategories = mysqlTable('video_categories', {
   sortOrder: int('sort_order').notNull().default(0),
 })
 
+export const VIDEO_PROVIDERS = ['youtube', 'upload'] as const
+
 export const VIDEO_STATUSES = ['draft', 'pending', 'flagged', 'published', 'rejected', 'unpublished'] as const
 
 export const videos = mysqlTable(
@@ -90,7 +93,8 @@ export const videos = mysqlTable(
     categoryId: ref('category_id').references(() => videoCategories.id, { onDelete: 'set null' }),
     source: mysqlEnum('source', ['staff', 'citizen']).notNull().default('staff'),
     // Provider abstraction (SRS §10): only YouTube for MVP, extendable later.
-    provider: mysqlEnum('provider', ['youtube']).notNull().default('youtube'),
+    // 'upload' = a file uploaded to Eye TV (MEDIA_DIR); provider_ref is then the media_uploads id.
+    provider: mysqlEnum('provider', VIDEO_PROVIDERS).notNull().default('youtube'),
     providerRef: varchar('provider_ref', { length: 64 }),
     // Untrusted link supplied by a citizen; only ever shown to staff, never embedded.
     submittedMediaUrl: varchar('submitted_media_url', { length: 500 }),
@@ -144,6 +148,29 @@ export const moderationReviews = mysqlTable(
     createdAt: ts('created_at').notNull().$defaultFn(now),
   },
   (t) => [index('moderation_reviews_video_idx').on(t.videoId)],
+)
+
+/**
+ * Video files uploaded in chunks by citizens (Report a story) or staff (video registry).
+ * Files live under MEDIA_DIR, outside the app folder, keyed by id; only the token *hash* is stored.
+ */
+export const mediaUploads = mysqlTable(
+  'media_uploads',
+  {
+    id: id(),
+    purpose: mysqlEnum('purpose', ['citizen', 'staff']).notNull(),
+    status: mysqlEnum('status', ['uploading', 'complete', 'attached']).notNull().default('uploading'),
+    tokenHash: char('token_hash', { length: 64 }).notNull(),
+    originalName: varchar('original_name', { length: 200 }).notNull(),
+    mimeType: varchar('mime_type', { length: 60 }).notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    receivedBytes: bigint('received_bytes', { mode: 'number' }).notNull().default(0),
+    uploadedBy: ref('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    ipHash: char('ip_hash', { length: 64 }),
+    createdAt: ts('created_at').notNull().$defaultFn(now),
+    completedAt: ts('completed_at'),
+  },
+  (t) => [index('media_uploads_status_created_idx').on(t.status, t.createdAt)],
 )
 
 /* ------------------------------------------------------------------ */
@@ -240,4 +267,6 @@ export type Video = typeof videos.$inferSelect
 export type VideoStatus = (typeof VIDEO_STATUSES)[number]
 export type VideoCategory = typeof videoCategories.$inferSelect
 export type LiveEvent = typeof liveEvents.$inferSelect
+export type MediaUpload = typeof mediaUploads.$inferSelect
+export type VideoProvider = (typeof VIDEO_PROVIDERS)[number]
 export type LiveEventStatus = (typeof LIVE_EVENT_STATUSES)[number]

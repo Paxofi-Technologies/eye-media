@@ -16,11 +16,18 @@ const errors = []
 const results = []
 const RUN = Date.now().toString(36)
 const STORY = `Collapsed drainage cover on Herbert Macaulay Way ${RUN}`
+// A 9MB "video": a real MP4 header followed by padding, so the upload spans two 8MB chunks.
+const fakeMp4 = (bytes) => {
+  const buf = Buffer.alloc(bytes)
+  Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]).copy(buf)
+  return buf
+}
 const check = (name, cond) => { results.push(`${cond ? 'PASS' : 'FAIL'} ${name}`) }
 
 async function newPage(ctx) {
   const p = await ctx.newPage()
-  p.on('console', (m) => { if (m.type() === 'error' && !/ytimg|youtube|ERR_TUNNEL_CONNECTION_FAILED/.test(m.text())) errors.push(`${p.url()} :: ${m.text()}`) })
+  p.on('console', (m) => { // 415 = the deliberate fake-video rejection below.
+    if (m.type() === 'error' && !/ytimg|youtube|ERR_TUNNEL_CONNECTION_FAILED|status of 415/.test(m.text())) errors.push(`${p.url()} :: ${m.text()}`) })
   p.on('pageerror', (e) => errors.push(`${p.url()} :: ${e.message}`))
   return p
 }
@@ -72,7 +79,13 @@ await p.fill('#title', STORY)
 await p.fill('#description', 'A drainage cover has collapsed near the Yaba bus stop and two okadas have already fallen in this morning.')
 await p.selectOption('#category', 'public-safety')
 await p.fill('#location', 'Yaba, Lagos')
-await p.fill('#mediaUrl', 'https://youtu.be/SlbyzVMQ44w')
+// A non-video renamed to .mp4 is rejected by the server after upload (bytes are checked, not the name).
+await p.setInputFiles('.dropzone input[type=file]', { name: 'not-a-video.mp4', mimeType: 'video/mp4', buffer: Buffer.from('<html><script>alert(1)</script></html>'.padEnd(2000, ' ')) })
+await p.getByText('not a supported video').waitFor({ timeout: 20000 })
+check('upload rejects files that are not really video', true)
+await p.setInputFiles('.dropzone input[type=file]', { name: 'drainage.mp4', mimeType: 'video/mp4', buffer: fakeMp4(9 * 1024 * 1024) })
+await p.getByText('✓ drainage.mp4').waitFor({ timeout: 60000 })
+check('citizen uploads a video from the device in chunks', true)
 await p.fill('#name', 'Kemi A.')
 await p.fill('#phone', '+234 801 234 5678')
 await p.check('input[name=consent]')
@@ -121,6 +134,10 @@ check('queue lists new citizen submission', await a.getByText(STORY).isVisible()
 await a.getByText(STORY).click()
 await a.waitForURL(/id=/)
 check('editor sees confidential submitter contact', await a.getByText('+234 801 234 5678').isVisible())
+const mediaSrc = await a.locator('.review-panel video').getAttribute('src')
+check('editor can preview the uploaded video', Boolean(mediaSrc && mediaSrc.startsWith('/media/')))
+const anon = await browser.newContext()
+check('unpublished upload is private', (await anon.request.get(BASE + mediaSrc)).status() === 404)
 const approve = a.getByRole('button', { name: /Approve/ })
 check('approve disabled until checklist complete', await approve.isDisabled())
 await a.screenshot({ path: `${OUT}/10-admin-queue-review.png`, fullPage: true })
@@ -144,6 +161,24 @@ await pub.waitForURL(/\/tv\/collapsed-drainage/)
 const html = await pub.content()
 check('approved story is public', html.includes(STORY))
 check('submitter phone never on public page', !html.includes('801 234 5678'))
+check('published story plays the uploaded video', (await pub.locator('.player video').getAttribute('src')) === mediaSrc)
+const ranged = await anon.request.get(BASE + mediaSrc, { headers: { Range: 'bytes=0-11' } })
+check('published media supports range requests', ranged.status() === 206 && ranged.headers()['content-range'] === `bytes 0-11/${9 * 1024 * 1024}`)
+await anon.close()
+
+// staff upload on a new registry video + pagination
+await a.goto(BASE + '/admin/videos/new')
+await a.fill('#title', `Staff upload ${RUN}`)
+await a.setInputFiles('.dropzone input[type=file]', { name: 'studio.mp4', mimeType: 'video/mp4', buffer: fakeMp4(300 * 1024) })
+await a.getByText('✓ studio.mp4').waitFor({ timeout: 30000 })
+await a.getByRole('button', { name: 'Create draft' }).click()
+await a.waitForURL(/\/admin\/videos\/[0-9a-f-]{36}\?created=1/)
+check('staff video created from an uploaded file', Boolean(await a.locator('.player video').getAttribute('src')))
+await a.goto(BASE + '/admin/videos')
+check('registry paginates 10 per page', (await a.locator('.admin-table tbody tr').count()) === 10 && (await a.locator('.pager').isVisible()))
+await a.locator('.pager').getByRole('link', { name: 'Page 2' }).click()
+await a.waitForURL(/page=2/)
+check('registry page 2 loads', (await a.locator('.admin-table tbody tr').count()) > 0)
 
 // live events: schedule → go live → public → end → replay draft
 const EVENT = `E2E live event ${RUN}`

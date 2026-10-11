@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { Player } from '@/components/tv/Player'
+import { mediaSource } from '@/lib/media'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import { VerifiedBadge, VideoCard } from '@/components/tv/VideoCard'
 import { formatCount, formatDate, formatDuration, initials } from '@/lib/format'
@@ -52,7 +53,9 @@ export default async function VideoPage({ params }: { params: Promise<{ slug: st
     thumbnailUrl: image ? [image] : undefined,
     uploadDate: video.publishedAt?.toISOString(),
     duration: video.durationSeconds ? `PT${video.durationSeconds}S` : undefined,
-    embedUrl: video.providerRef ? `https://www.youtube-nocookie.com/embed/${video.providerRef}` : undefined,
+    embedUrl:
+      video.provider === 'youtube' && video.providerRef ? `https://www.youtube-nocookie.com/embed/${video.providerRef}` : undefined,
+    contentUrl: video.provider === 'upload' && video.providerRef ? `${siteUrl}/media/${video.providerRef}` : undefined,
     publisher: { '@type': 'Organization', name: 'Eye Media Group' },
   }
 
@@ -65,7 +68,7 @@ export default async function VideoPage({ params }: { params: Promise<{ slug: st
       />
       <div className="wrap video-layout">
         <article>
-          <Player youtubeId={video.providerRef} title={video.title} />
+          <Player {...mediaSource(video.provider, video.providerRef)} title={video.title} />
           <div className="meta-row" style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {video.categoryName && (
               <Link className="badge badge-cat" href={`/tv/archive?category=${video.categorySlug}&range=all`}>

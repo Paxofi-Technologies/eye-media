@@ -9,6 +9,7 @@ import { db, schema } from '@/db'
 import { recordAudit } from '@/lib/audit'
 import { AuthzError, authorize, destroySession, getCurrentUser, hashPassword } from '@/lib/auth'
 import { slugSuffix } from '@/lib/ids'
+import { claimUpload } from '@/lib/uploads'
 import { RESERVED_SLUGS, videoSlug } from '@/lib/slug'
 import {
   MODERATION_CHECKLIST,
@@ -167,7 +168,6 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
     summary: d.summary,
     description: d.description,
     categoryId: d.categoryId,
-    providerRef: d.youtube,
     durationSeconds: d.duration,
     location: d.location,
     tags: d.tags,
@@ -179,17 +179,36 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
     updatedAt: new Date(),
   }
 
-  if (id) {
-    const [existing] = await db.select().from(schema.videos).where(eq(schema.videos.id, id)).limit(1)
-    if (!existing) return { ok: false, message: 'This video no longer exists.' }
+  const existing = id ? (await db.select().from(schema.videos).where(eq(schema.videos.id, id)).limit(1))[0] : undefined
+  if (id && !existing) return { ok: false, message: 'This video no longer exists.' }
+
+  // Video source: a newly uploaded file wins, then a YouTube link, then the file already attached.
+  const uploadId = form.get('uploadId')
+  let media: { provider: 'youtube' | 'upload'; providerRef: string | null }
+  if (typeof uploadId === 'string' && uploadId) {
+    const upload = await claimUpload(uploadId, String(form.get('uploadToken') ?? ''), 'staff')
+    if (!upload) {
+      return { ok: false, message: 'The video upload did not finish. Please upload it again.', errors: { upload: 'Upload the file again, then save.' } }
+    }
+    media = { provider: 'upload', providerRef: upload.id }
+  } else if (d.youtube) {
+    media = { provider: 'youtube', providerRef: d.youtube }
+  } else if (existing?.provider === 'upload') {
+    media = { provider: 'upload', providerRef: existing.providerRef }
+  } else {
+    media = { provider: 'youtube', providerRef: null }
+  }
+  const row = { ...values, ...media }
+
+  if (id && existing) {
     if (existing.status === 'published') {
-      const blocker = publishBlocker({ providerRef: values.providerRef, categoryId: values.categoryId })
+      const blocker = publishBlocker({ providerRef: row.providerRef, categoryId: row.categoryId })
       if (blocker) return { ok: false, message: `This video is live on Eye TV. ${blocker}` }
     }
     // Only one featured hero at a time.
     await db.transaction(async (tx) => {
       if (values.featured) await tx.update(schema.videos).set({ featured: false }).where(ne(schema.videos.id, id))
-      await tx.update(schema.videos).set(values).where(eq(schema.videos.id, id))
+      await tx.update(schema.videos).set(row).where(eq(schema.videos.id, id))
     })
     await recordAudit(user, 'video.updated', { type: 'video', id, label: values.title })
     revalidatePath('/admin', 'layout')
@@ -201,7 +220,7 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
   await db.transaction(async (tx) => {
     if (values.featured) await tx.update(schema.videos).set({ featured: false })
     await tx.insert(schema.videos).values({
-      ...values,
+      ...row,
       id: created.id,
       source: 'staff',
       status: 'draft',
