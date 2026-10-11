@@ -126,25 +126,43 @@ export async function listVideos(params: { q: string; categoryId: string | null;
   return { rows, total: total?.n ?? 0 }
 }
 
-export async function getLiveSettings() {
-  const [row] = await db.select().from(schema.liveStream).where(eq(schema.liveStream.id, 1)).limit(1)
-  return row ?? null
+const events = schema.liveEvents
+
+export async function getLiveCount() {
+  const [row] = await db.select({ n: count() }).from(events).where(eq(events.status, 'live'))
+  return row?.n ?? 0
 }
 
-export async function getScheduleForStaff() {
+/** Live now, upcoming, and the last 7 days, for the Live & Schedule console. */
+export async function listLiveEventsForStaff() {
+  const replayVideo = alias(videos, 'replay_video')
   return db
     .select({
-      id: schema.scheduleItems.id,
-      title: schema.scheduleItems.title,
-      startsAt: schema.scheduleItems.startsAt,
+      id: events.id,
+      title: events.title,
+      city: events.city,
+      venue: events.venue,
+      status: events.status,
+      featured: events.featured,
+      providerRef: events.providerRef,
+      startsAt: events.startsAt,
+      startedAt: events.startedAt,
+      endedAt: events.endedAt,
+      replayVideoId: events.replayVideoId,
+      replayStatus: replayVideo.status,
       categoryName: cats.name,
     })
-    .from(schema.scheduleItems)
-    .leftJoin(cats, eq(cats.id, schema.scheduleItems.categoryId))
-    // Hide slots that finished more than a day ago.
-    .where(gte(schema.scheduleItems.startsAt, new Date(Date.now() - 24 * 60 * 60 * 1000)))
-    .orderBy(asc(schema.scheduleItems.startsAt))
-    .limit(100)
+    .from(events)
+    .leftJoin(cats, eq(cats.id, events.categoryId))
+    .leftJoin(replayVideo, eq(replayVideo.id, events.replayVideoId))
+    .where(or(eq(events.status, 'live'), gte(events.startsAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))))
+    .orderBy(desc(eq(events.status, 'live')), asc(events.startsAt))
+    .limit(300)
+}
+
+export async function getLiveEventForStaff(id: string) {
+  const [row] = await db.select().from(events).where(eq(events.id, id)).limit(1)
+  return row ?? null
 }
 
 export const AUDIT_PAGE_SIZE = 50

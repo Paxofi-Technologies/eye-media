@@ -71,7 +71,6 @@ export default async function EditVideoPage({
 
       <div className="two-col">
         <VideoForm
-          key={v.updatedAt.toISOString()}
           initial={{ ...v, slug: v.slug }}
           categories={categories}
           canEdit={canEdit}

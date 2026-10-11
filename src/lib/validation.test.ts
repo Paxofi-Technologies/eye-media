@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scheduleItemSchema, submissionSchema, videoSchema } from './validation'
+import { liveEventSchema, submissionSchema, videoSchema } from './validation'
 
 const validSubmission = {
   title: 'Pothole on Ojota flyover',
@@ -57,9 +57,19 @@ describe('videoSchema', () => {
   })
 })
 
-describe('scheduleItemSchema', () => {
+describe('liveEventSchema', () => {
+  const base = { title: 'Weekly wrap', startsAt: '2026-10-10T21:00', categoryId: '', youtube: '' }
   it('interprets datetime-local as Lagos time', () => {
-    const r = scheduleItemSchema.parse({ title: 'Weekly wrap', startsAt: '2026-10-10T21:00', categoryId: '' })
+    const r = liveEventSchema.parse(base)
     expect(r.startsAt.toISOString()).toBe('2026-10-10T20:00:00.000Z')
+    expect(r.endsAt).toBeNull()
+    expect(r.featured).toBe(false)
+  })
+  it('rejects an end before the start and bad YouTube input', () => {
+    expect(liveEventSchema.safeParse({ ...base, endsAt: '2026-10-10T20:00' }).success).toBe(false)
+    expect(liveEventSchema.safeParse({ ...base, youtube: 'https://vimeo.com/1' }).success).toBe(false)
+  })
+  it('accepts a YouTube Live URL', () => {
+    expect(liveEventSchema.parse({ ...base, youtube: 'https://www.youtube.com/live/SlbyzVMQ44w' }).youtube).toBe('SlbyzVMQ44w')
   })
 })

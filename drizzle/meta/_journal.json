@@ -15,6 +15,20 @@
       "when": 1791643109929,
       "tag": "0001_seed_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791755865075,
+      "tag": "0002_live_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1791755865794,
+      "tag": "0003_copy_legacy_live_data",
+      "breakpoints": true
     }
   ]
 }

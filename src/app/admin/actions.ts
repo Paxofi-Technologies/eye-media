@@ -15,9 +15,9 @@ import {
   createUserSchema,
   fieldErrors,
   formToObject,
-  liveSettingsSchema,
+  liveEventSchema,
+  liveEventStatusSchema,
   moderationSchema,
-  scheduleItemSchema,
   videoSchema,
   videoStatusChangeSchema,
   type FieldErrors,
@@ -252,7 +252,7 @@ export async function changeVideoStatus(form: FormData): Promise<void> {
 /* Live stream & schedule                                              */
 /* ------------------------------------------------------------------ */
 
-export async function saveLiveSettings(_prev: ActionState, form: FormData): Promise<ActionState> {
+export async function saveLiveEvent(_prev: ActionState, form: FormData): Promise<ActionState> {
   let user
   try {
     user = await authorize('live.manage')
@@ -260,69 +260,141 @@ export async function saveLiveSettings(_prev: ActionState, form: FormData): Prom
     if (e instanceof AuthzError) return denied()
     throw e
   }
-  const parsed = liveSettingsSchema.safeParse(formToObject(form))
+  const idParse = z.union([z.uuid(), z.literal('')]).safeParse(form.get('id') ?? '')
+  if (!idParse.success) return { ok: false, message: 'Invalid event.' }
+  const id = idParse.data || null
+
+  const parsed = liveEventSchema.safeParse(formToObject(form))
   if (!parsed.success) return { ok: false, message: 'Please fix the highlighted fields.', errors: fieldErrors(parsed.error) }
   const d = parsed.data
 
-  const [current] = await db.select().from(schema.liveStream).where(eq(schema.liveStream.id, 1)).limit(1)
-  if (current?.status === 'live' && !d.youtube) {
-    return { ok: false, message: 'End the stream before removing its YouTube video.', errors: { youtube: 'Required while live' } }
+  const values = {
+    title: d.title,
+    description: d.description,
+    categoryId: d.categoryId,
+    city: d.city,
+    venue: d.venue,
+    startsAt: d.startsAt,
+    endsAt: d.endsAt,
+    providerRef: d.youtube,
+    featured: d.featured,
+    updatedAt: new Date(),
   }
 
-  const values = { title: d.title, description: d.description, categoryId: d.categoryId, youtubeVideoId: d.youtube, updatedAt: new Date() }
-  await db
-    .insert(schema.liveStream)
-    .values({ id: 1, ...values })
-    .onDuplicateKeyUpdate({ set: values })
-  await recordAudit(user, 'live.updated', { type: 'live', id: '1', label: d.title })
-  revalidatePath('/admin/live')
+  if (id) {
+    const existing = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+    if (!existing) return { ok: false, message: 'This event no longer exists.' }
+    if (existing.status === 'live' && !values.providerRef) {
+      return { ok: false, message: 'This event is live. Keep its YouTube video attached.', errors: { youtube: 'Required while live' } }
+    }
+    await db.transaction(async (tx) => {
+      if (values.featured) await tx.update(schema.liveEvents).set({ featured: false }).where(ne(schema.liveEvents.id, id))
+      await tx.update(schema.liveEvents).set(values).where(eq(schema.liveEvents.id, id))
+    })
+    await recordAudit(user, 'live.event_updated', { type: 'live_event', id, label: values.title })
+    revalidatePath('/admin', 'layout')
+    revalidatePublic()
+    return { ok: true, message: 'Event saved.' }
+  }
+
+  const newId = randomUUID()
+  await db.transaction(async (tx) => {
+    if (values.featured) await tx.update(schema.liveEvents).set({ featured: false })
+    await tx.insert(schema.liveEvents).values({ ...values, id: newId, status: 'scheduled', createdBy: user.id })
+  })
+  await recordAudit(user, 'live.event_created', { type: 'live_event', id: newId, label: values.title })
+  revalidatePath('/admin', 'layout')
   revalidatePublic()
-  return { ok: true, message: 'Live settings saved.' }
+  redirect(`/admin/live/${newId}?created=1`)
 }
 
-export async function setLiveStatus(form: FormData): Promise<void> {
+export async function setLiveEventStatus(form: FormData): Promise<void> {
   const user = await authorize('live.manage')
-  const goLive = form.get('status') === 'live'
-  const [current] = await db.select().from(schema.liveStream).where(eq(schema.liveStream.id, 1)).limit(1)
-  if (goLive && !current?.youtubeVideoId) {
-    redirect(`/admin/live?error=${encodeURIComponent('Save a YouTube Live video before going live.')}`)
+  const parsed = liveEventStatusSchema.safeParse({ id: form.get('id'), status: form.get('status') })
+  if (!parsed.success) throw new Error('Invalid request')
+  const { id, status } = parsed.data
+  const back = form.get('back') === 'detail' ? `/admin/live/${id}` : '/admin/live'
+
+  const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+  if (!event) redirect('/admin/live')
+  if (status === 'live' && !event.providerRef) {
+    redirect(`${back}?error=${encodeURIComponent('Attach the YouTube Live video before going live.')}`)
   }
+
+  const now = new Date()
   await db
-    .update(schema.liveStream)
-    .set({ status: goLive ? 'live' : 'offline', startedAt: goLive ? new Date() : null, updatedAt: new Date() })
-    .where(eq(schema.liveStream.id, 1))
-  await recordAudit(user, goLive ? 'live.started' : 'live.ended', { type: 'live', id: '1', label: current?.title })
-  revalidatePath('/admin/live')
+    .update(schema.liveEvents)
+    .set({
+      status,
+      startedAt: status === 'live' ? (event.startedAt ?? now) : event.startedAt,
+      endedAt: status === 'ended' ? now : status === 'live' ? null : event.endedAt,
+      updatedAt: now,
+    })
+    .where(eq(schema.liveEvents.id, id))
+
+  const action =
+    status === 'live' ? 'live.started' : status === 'ended' ? 'live.ended' : status === 'cancelled' ? 'live.cancelled' : 'live.event_updated'
+  await recordAudit(user, action, { type: 'live_event', id, label: event.title }, `${event.status} → ${status}`)
+  revalidatePath('/admin', 'layout')
+  revalidatePublic()
+  redirect(back)
+}
+
+export async function deleteLiveEvent(form: FormData): Promise<void> {
+  const user = await authorize('live.manage')
+  const id = z.uuid().parse(form.get('id'))
+  const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+  if (!event) redirect('/admin/live')
+  // Anything that has been on air is part of the record: end or cancel it instead.
+  if (event.status === 'live' || event.startedAt) {
+    redirect(`/admin/live/${id}?error=${encodeURIComponent('Events that have been on air cannot be deleted.')}`)
+  }
+  await db.delete(schema.liveEvents).where(eq(schema.liveEvents.id, id))
+  await recordAudit(user, 'live.event_deleted', { type: 'live_event', id, label: event.title })
+  revalidatePath('/admin', 'layout')
   revalidatePublic()
   redirect('/admin/live')
 }
 
-export async function addScheduleItem(_prev: ActionState, form: FormData): Promise<ActionState> {
-  let user
-  try {
-    user = await authorize('schedule.manage')
-  } catch (e) {
-    if (e instanceof AuthzError) return denied()
-    throw e
-  }
-  const parsed = scheduleItemSchema.safeParse(formToObject(form))
-  if (!parsed.success) return { ok: false, message: 'Please fix the highlighted fields.', errors: fieldErrors(parsed.error) }
-  const itemId = randomUUID()
-  await db.insert(schema.scheduleItems).values({ id: itemId, ...parsed.data })
-  await recordAudit(user, 'schedule.created', { type: 'schedule', id: itemId, label: parsed.data.title })
-  revalidatePath('/admin/live')
-  revalidatePublic()
-  return { ok: true, message: 'Added to the schedule.' }
-}
-
-export async function deleteScheduleItem(form: FormData): Promise<void> {
-  const user = await authorize('schedule.manage')
+/** Turns an ended broadcast into a draft archive video (published through the normal workflow). */
+export async function createReplayFromEvent(form: FormData): Promise<void> {
+  const user = await authorize('video.edit')
+  await authorize('live.manage')
   const id = z.uuid().parse(form.get('id'))
-  const [row] = await db.select().from(schema.scheduleItems).where(eq(schema.scheduleItems.id, id)).limit(1)
-  await db.delete(schema.scheduleItems).where(eq(schema.scheduleItems.id, id))
-  if (row) await recordAudit(user, 'schedule.deleted', { type: 'schedule', id, label: row.title })
-  revalidatePath('/admin/live')
-  revalidatePublic()
+  const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+  if (!event) redirect('/admin/live')
+  if (event.replayVideoId) redirect(`/admin/videos/${event.replayVideoId}`)
+  if (event.status !== 'ended' || !event.providerRef) {
+    redirect(`/admin/live/${id}?error=${encodeURIComponent('Only ended events with a YouTube video can become a replay.')}`)
+  }
+
+  const videoId = randomUUID()
+  const slug = await uniqueSlug(videoSlug(event.title), null)
+  if (!slug) redirect(`/admin/live/${id}?error=${encodeURIComponent('Could not generate a slug for the replay.')}`)
+  const duration =
+    event.startedAt && event.endedAt ? Math.round((event.endedAt.getTime() - event.startedAt.getTime()) / 1000) : null
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.videos).values({
+      id: videoId,
+      slug,
+      title: event.title,
+      summary: event.description?.slice(0, 400) ?? null,
+      description: event.description,
+      categoryId: event.categoryId,
+      providerRef: event.providerRef,
+      durationSeconds: duration,
+      location: [event.venue, event.city].filter(Boolean).join(', ') || null,
+      tags: ['live', 'replay'],
+      reporterName: 'Eye TV Live',
+      reporterId: user.id,
+      source: 'staff',
+      status: 'draft',
+    })
+    await tx.update(schema.liveEvents).set({ replayVideoId: videoId, updatedAt: new Date() }).where(eq(schema.liveEvents.id, id))
+  })
+  await recordAudit(user, 'live.replay_created', { type: 'video', id: videoId, label: event.title })
+  revalidatePath('/admin', 'layout')
+  redirect(`/admin/videos/${videoId}?created=1`)
 }
 
 /* ------------------------------------------------------------------ */

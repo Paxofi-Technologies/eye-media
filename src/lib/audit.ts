@@ -17,6 +17,11 @@ export type AuditAction =
   | 'live.updated'
   | 'live.started'
   | 'live.ended'
+  | 'live.cancelled'
+  | 'live.event_created'
+  | 'live.event_updated'
+  | 'live.event_deleted'
+  | 'live.replay_created'
   | 'schedule.created'
   | 'schedule.deleted'
   | 'user.created'
@@ -38,6 +43,11 @@ export const AUDIT_LABELS: Record<AuditAction, string> = {
   'live.updated': 'Updated live settings',
   'live.started': 'Went live',
   'live.ended': 'Ended live stream',
+  'live.cancelled': 'Cancelled live event',
+  'live.event_created': 'Scheduled live event',
+  'live.event_updated': 'Edited live event',
+  'live.event_deleted': 'Deleted live event',
+  'live.replay_created': 'Created replay from live event',
   'schedule.created': 'Added schedule slot',
   'schedule.deleted': 'Removed schedule slot',
   'user.created': 'Created staff user',

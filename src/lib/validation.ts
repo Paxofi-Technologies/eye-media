@@ -162,11 +162,14 @@ export const moderationSchema = z.object({
 
 /* ---------------- Staff: live & schedule ---------------- */
 
-export const liveSettingsSchema = z.object({
-  title: z.string().trim().min(3).max(200),
-  description: optionalText(2000),
-  categoryId: optionalUuid,
-  youtube: z
+// <input type="datetime-local"> value, interpreted as Lagos time (UTC+1, no DST).
+const lagosDateTime = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Pick a date and time.')
+  .transform((v) => new Date(`${v}:00+01:00`))
+
+const youtubeField = (message: string) =>
+  z
     .string()
     .trim()
     .max(200)
@@ -174,21 +177,29 @@ export const liveSettingsSchema = z.object({
       if (v === '') return null
       const id = parseYouTubeId(v)
       if (!id) {
-        ctx.addIssue({ code: 'custom', message: 'Enter the YouTube Live video id or watch URL.' })
+        ctx.addIssue({ code: 'custom', message })
         return z.NEVER
       }
       return id
-    }),
-})
+    })
 
-export const scheduleItemSchema = z.object({
-  title: z.string().trim().min(3).max(200),
-  // <input type="datetime-local"> value, interpreted as Lagos time (UTC+1, no DST).
-  startsAt: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Pick a date and time.')
-    .transform((v) => new Date(`${v}:00+01:00`)),
-  categoryId: optionalUuid,
+export const liveEventSchema = z
+  .object({
+    title: z.string().trim().min(3).max(200),
+    description: optionalText(2000),
+    categoryId: optionalUuid,
+    city: optionalText(80),
+    venue: optionalText(160),
+    startsAt: lagosDateTime,
+    endsAt: z.union([z.literal(''), lagosDateTime]).optional().transform((v) => (v ? v : null)),
+    youtube: youtubeField('Enter the YouTube Live video id or watch URL.'),
+    featured: checkbox,
+  })
+  .refine((d) => !d.endsAt || d.endsAt > d.startsAt, { message: 'End time must be after the start time.', path: ['endsAt'] })
+
+export const liveEventStatusSchema = z.object({
+  id: z.uuid(),
+  status: z.enum(['scheduled', 'live', 'ended', 'cancelled']),
 })
 
 /* ---------------- helpers ---------------- */

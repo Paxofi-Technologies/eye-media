@@ -1,93 +1,110 @@
 'use client'
 
 import { useActionState } from 'react'
-import { addScheduleItem, saveLiveSettings, type ActionState } from '@/app/admin/actions'
+import { saveLiveEvent, type ActionState } from '@/app/admin/actions'
 import { Field } from '@/components/Field'
 
 type Cat = { id: string; name: string }
 
-function Message({ state }: { state: ActionState }) {
-  if (!state.message) return null
-  return (
-    <div className={state.ok ? 'alert alert-success' : 'alert alert-error'} role={state.ok ? 'status' : 'alert'}>
-      {state.message}
-    </div>
-  )
+export type LiveEventFormValues = {
+  id: string
+  title: string
+  description: string | null
+  categoryId: string | null
+  city: string | null
+  venue: string | null
+  startsAt: Date
+  endsAt: Date | null
+  providerRef: string | null
+  featured: boolean
 }
 
-export function LiveSettingsForm({
+/** Date → value for <input type="datetime-local"> in Lagos time (UTC+1). */
+function toLagosInput(d: Date | null | undefined): string {
+  if (!d) return ''
+  return new Date(d.getTime() + 60 * 60 * 1000).toISOString().slice(0, 16)
+}
+
+export function LiveEventForm({
   initial,
   categories,
+  cities,
 }: {
-  initial: { title: string; description: string | null; categoryId: string | null; youtubeVideoId: string | null } | null
+  initial: LiveEventFormValues | null
   categories: Cat[]
+  cities: string[]
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveLiveSettings, { ok: false, message: null })
+  const [state, action, pending] = useActionState<ActionState, FormData>(saveLiveEvent, { ok: false, message: null })
   const e = state.errors ?? {}
+  const v = initial
   return (
-    <form action={action} className="form-panel">
-      <h2>Stream settings</h2>
-      <Message state={state} />
-      <Field id="title" label="Stream title" error={e.title}>
-        {(p) => <input {...p} name="title" required maxLength={200} defaultValue={initial?.title ?? ''} />}
+    <form action={action} className="form-panel" key={state.ok ? state.message : 'form'}>
+      <h2>{v ? 'Event details' : 'Schedule a live event'}</h2>
+      {state.message && (
+        <div className={state.ok ? 'alert alert-success' : 'alert alert-error'} role={state.ok ? 'status' : 'alert'}>
+          {state.message}
+        </div>
+      )}
+      <input type="hidden" name="id" value={v?.id ?? ''} />
+      <Field id="le-title" label="Title" error={e.title}>
+        {(p) => <input {...p} name="title" required maxLength={200} defaultValue={v?.title ?? ''} />}
       </Field>
       <div className="field-row">
-        <Field id="categoryId" label="Category" error={e.categoryId}>
+        <Field id="le-start" label="Starts (Lagos time)" error={e.startsAt}>
+          {(p) => <input {...p} name="startsAt" type="datetime-local" required defaultValue={toLagosInput(v?.startsAt)} />}
+        </Field>
+        <Field id="le-end" label="Ends (optional)" error={e.endsAt}>
+          {(p) => <input {...p} name="endsAt" type="datetime-local" defaultValue={toLagosInput(v?.endsAt)} />}
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field id="le-city" label="City" hint="Used by the schedule's city filter" error={e.city}>
           {(p) => (
-            <select {...p} name="categoryId" defaultValue={initial?.categoryId ?? ''}>
+            <>
+              <input {...p} name="city" maxLength={80} list="le-cities" defaultValue={v?.city ?? ''} placeholder="e.g. Lagos" />
+              <datalist id="le-cities">
+                {cities.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </Field>
+        <Field id="le-venue" label="Venue" error={e.venue}>
+          {(p) => <input {...p} name="venue" maxLength={160} defaultValue={v?.venue ?? ''} placeholder="e.g. Ajah field desk" />}
+        </Field>
+      </div>
+      <div className="field-row">
+        <Field id="le-cat" label="Category" error={e.categoryId}>
+          {(p) => (
+            <select {...p} name="categoryId" defaultValue={v?.categoryId ?? ''}>
               <option value="">— None —</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           )}
         </Field>
         <Field
-          id="youtube"
+          id="le-yt"
           label="YouTube Live video"
-          hint="The watch URL or video id of the scheduled broadcast in YouTube Studio."
+          hint="Watch URL or id of this broadcast in YouTube Studio. Required before going live."
           error={e.youtube}
         >
-          {(p) => <input {...p} name="youtube" maxLength={200} defaultValue={initial?.youtubeVideoId ?? ''} placeholder="https://youtube.com/live/…" />}
+          {(p) => <input {...p} name="youtube" maxLength={200} defaultValue={v?.providerRef ?? ''} placeholder="https://youtube.com/live/…" />}
         </Field>
       </div>
-      <Field id="description" label="Description" error={e.description}>
-        {(p) => <textarea {...p} name="description" maxLength={2000} rows={3} defaultValue={initial?.description ?? ''} />}
+      <Field id="le-desc" label="Description" error={e.description}>
+        {(p) => <textarea {...p} name="description" maxLength={2000} rows={3} defaultValue={v?.description ?? ''} />}
       </Field>
-      <p className="field-hint" style={{ marginTop: -6 }}>
-        Stream keys and ingest URLs stay in YouTube Studio / OBS and are never stored in Eye TV.
-      </p>
-      <button className="btn btn-primary" type="submit" disabled={pending}>
-        {pending ? 'Saving…' : 'Save settings'}
-      </button>
-    </form>
-  )
-}
-
-export function ScheduleForm({ categories }: { categories: Cat[] }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(addScheduleItem, { ok: false, message: null })
-  const e = state.errors ?? {}
-  return (
-    <form action={action} key={state.ok ? state.message : 'form'}>
-      <Message state={state} />
-      <Field id="s-title" label="Programme" error={e.title}>
-        {(p) => <input {...p} name="title" required maxLength={200} />}
-      </Field>
-      <Field id="s-start" label="Starts (Lagos time)" error={e.startsAt}>
-        {(p) => <input {...p} name="startsAt" type="datetime-local" required />}
-      </Field>
-      <Field id="s-cat" label="Category" error={e.categoryId}>
-        {(p) => (
-          <select {...p} name="categoryId" defaultValue="">
-            <option value="">— None —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <button className="btn btn-ghost" type="submit" disabled={pending}>
-        Add to schedule
+      <label className="check">
+        <input type="checkbox" name="featured" defaultChecked={v?.featured} /> Feature on the homepage when live
+      </label>
+      <p className="field-hint">Stream keys and ingest URLs stay in YouTube Studio / OBS / the phone app and are never stored in Eye TV.</p>
+      <button className="btn btn-primary" type="submit" disabled={pending} style={{ marginTop: 8 }}>
+        {pending ? 'Saving…' : v ? 'Save changes' : 'Add to schedule'}
       </button>
     </form>
   )

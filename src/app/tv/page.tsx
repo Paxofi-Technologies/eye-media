@@ -2,16 +2,19 @@ import Link from 'next/link'
 import { Player } from '@/components/tv/Player'
 import { SchedulePanel } from '@/components/tv/Schedule'
 import { VerifiedBadge, VideoCard } from '@/components/tv/VideoCard'
-import { getCategoriesWithCounts, getEditorsPicks, getFeatured, getLatest, getLiveStream, getUpcomingSchedule } from '@/lib/tv'
+import { requestTime } from '@/lib/schedule'
+import { getCategoriesWithCounts, getEditorsPicks, getFeatured, getLatest, getLiveEvents, getUpcomingEvents } from '@/lib/tv'
 
 export default async function TvHome() {
-  const [live, featured, schedule, picks, categories] = await Promise.all([
-    getLiveStream(),
+  const now = requestTime()
+  const [liveEvents, featured, schedule, picks, categories] = await Promise.all([
+    getLiveEvents(),
     getFeatured(),
-    getUpcomingSchedule(4),
+    getUpcomingEvents(5),
     getEditorsPicks(8),
     getCategoriesWithCounts(),
   ])
+  const live = liveEvents[0] ?? null
   const latest = await getLatest(4, live ? undefined : featured?.id)
   const lead = !live ? (featured ?? latest[0] ?? null) : null
   const latestList = lead && !featured ? latest.slice(1) : latest
@@ -24,7 +27,7 @@ export default async function TvHome() {
           <div>
             {live ? (
               <>
-                <Player youtubeId={live.youtubeVideoId} title={live.title} live />
+                <Player youtubeId={live.providerRef} title={live.title} live />
                 <div className="hero-copy">
                   <div className="meta-row">
                     {live.categoryName && <span className="badge badge-cat">{live.categoryName}</span>}
@@ -32,9 +35,14 @@ export default async function TvHome() {
                       <span className="pulse" />
                       LIVE NOW
                     </span>
+                    {liveEvents.length > 1 && (
+                      <Link className="badge badge-cat" href="/tv/live">
+                        {liveEvents.length} streams live · watch all
+                      </Link>
+                    )}
                   </div>
                   <h1>
-                    <Link href="/tv/live">{live.title}</Link>
+                    <Link href={`/tv/live/${live.id}`}>{live.title}</Link>
                   </h1>
                   {live.description && <p>{live.description}</p>}
                 </div>
@@ -61,7 +69,7 @@ export default async function TvHome() {
             )}
           </div>
           <div>
-            <SchedulePanel heading="Up next on Eye TV" slots={schedule} />
+            <SchedulePanel heading="Live & up next" slots={schedule} now={now} />
             <section className="panel cta-panel">
               <h2>Seen something newsworthy?</h2>
               <p>Send it to the Eye Media newsroom. Every submission is reviewed by an editor before it is published.</p>

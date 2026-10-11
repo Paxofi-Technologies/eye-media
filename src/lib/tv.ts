@@ -1,5 +1,6 @@
 import 'server-only'
-import { and, asc, count, desc, eq, gte, inArray, like, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, like, lt, ne, notInArray, or, sql } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/mysql-core'
 import { db, schema } from '@/db'
 
 const { videos, videoCategories: cats } = schema
@@ -166,40 +167,82 @@ export async function searchVideos(params: {
   return { rows, total: total?.n ?? 0 }
 }
 
-export async function getLiveStream() {
-  const rows = await db
-    .select({
-      title: schema.liveStream.title,
-      description: schema.liveStream.description,
-      youtubeVideoId: schema.liveStream.youtubeVideoId,
-      status: schema.liveStream.status,
-      startedAt: schema.liveStream.startedAt,
-      categoryName: cats.name,
-    })
-    .from(schema.liveStream)
-    .leftJoin(cats, eq(cats.id, schema.liveStream.categoryId))
-    .where(eq(schema.liveStream.id, 1))
-    .limit(1)
-  const live = rows[0]
-  return live && live.status === 'live' && live.youtubeVideoId ? live : null
+/* ------------------------------------------------------------------ */
+/* Live events (any number may be live at once)                         */
+/* ------------------------------------------------------------------ */
+
+const ev = schema.liveEvents
+const replay = alias(videos, 'replay')
+
+const eventColumns = {
+  id: ev.id,
+  title: ev.title,
+  description: ev.description,
+  city: ev.city,
+  venue: ev.venue,
+  providerRef: ev.providerRef,
+  status: ev.status,
+  featured: ev.featured,
+  startsAt: ev.startsAt,
+  endsAt: ev.endsAt,
+  startedAt: ev.startedAt,
+  categoryName: cats.name,
+  // Only a *published* replay is linked publicly.
+  replaySlug: sql<string | null>`case when ${replay.status} = 'published' then ${replay.slug} else null end`,
 }
 
-export async function getUpcomingSchedule(limit: number) {
-  const now = Date.now()
-  // Include slots that started within the last hour so "now" still shows.
-  const rows = await db
-    .select({
-      id: schema.scheduleItems.id,
-      title: schema.scheduleItems.title,
-      startsAt: schema.scheduleItems.startsAt,
-      categoryName: cats.name,
-    })
-    .from(schema.scheduleItems)
-    .leftJoin(cats, eq(cats.id, schema.scheduleItems.categoryId))
-    .where(gte(schema.scheduleItems.startsAt, new Date(now - 60 * 60 * 1000)))
-    .orderBy(asc(schema.scheduleItems.startsAt))
+export type PublicLiveEvent = Awaited<ReturnType<typeof getLiveEvents>>[number]
+
+function eventQuery() {
+  return db
+    .select(eventColumns)
+    .from(ev)
+    .leftJoin(cats, eq(cats.id, ev.categoryId))
+    .leftJoin(replay, eq(replay.id, ev.replayVideoId))
+}
+
+/** Every event currently on air; featured first. */
+export async function getLiveEvents() {
+  return eventQuery()
+    .where(and(eq(ev.status, 'live'), isNotNull(ev.providerRef)))
+    .orderBy(desc(ev.featured), asc(ev.startedAt))
+}
+
+export async function getLiveEvent(id: string) {
+  const rows = await eventQuery().where(eq(ev.id, id)).limit(1)
+  return rows[0] ?? null
+}
+
+/** Live now plus what is coming up next (used by the home and live pages). */
+export async function getUpcomingEvents(limit: number) {
+  return eventQuery()
+    .where(
+      or(
+        eq(ev.status, 'live'),
+        and(eq(ev.status, 'scheduled'), gte(ev.startsAt, new Date(Date.now() - 60 * 60 * 1000))),
+      ),
+    )
+    .orderBy(desc(eq(ev.status, 'live')), asc(ev.startsAt))
     .limit(limit)
-  return rows.map((r) => ({ ...r, onNow: r.startsAt.getTime() <= now }))
+}
+
+/** All events whose start falls inside [start, end), optionally for one city. */
+export async function getScheduleForRange(start: Date, end: Date, city: string | null) {
+  const conds = [gte(ev.startsAt, start), lt(ev.startsAt, end)]
+  if (city) conds.push(eq(ev.city, city))
+  return eventQuery()
+    .where(and(...conds))
+    .orderBy(asc(ev.startsAt))
+    .limit(200)
+}
+
+export async function getScheduleCities() {
+  const rows = await db
+    .selectDistinct({ city: ev.city })
+    .from(ev)
+    .where(isNotNull(ev.city))
+    .orderBy(asc(ev.city))
+  return rows.map((r) => r.city!).filter(Boolean)
 }
 
 export async function getSitemapEntries() {

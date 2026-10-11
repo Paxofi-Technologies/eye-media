@@ -1,39 +1,56 @@
+import Link from 'next/link'
 import { formatClock } from '@/lib/format'
+import { eventPhase } from '@/lib/schedule'
 
-type Slot = { id: string; title: string; startsAt: Date; categoryName: string | null; onNow: boolean }
+type Slot = {
+  id: string
+  title: string
+  startsAt: Date
+  endsAt: Date | null
+  status: 'scheduled' | 'live' | 'ended' | 'cancelled'
+  categoryName: string | null
+  city: string | null
+}
 
-export function SchedulePanel({ heading, slots, liveTitle }: { heading: string; slots: Slot[]; liveTitle?: string | null }) {
+/** Compact "Up next" list used beside the hero on Home and Live. */
+export function SchedulePanel({ heading, slots, now }: { heading: string; slots: Slot[]; now: Date }) {
   return (
     <section className="panel" aria-label={heading}>
       <h2 className="head">{heading}</h2>
-      {slots.length === 0 && !liveTitle ? (
-        <p className="empty">The programme schedule will appear here.</p>
+      {slots.length === 0 ? (
+        <p className="empty">Nothing scheduled right now. Check the full schedule for upcoming broadcasts.</p>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {liveTitle && (
-            <li className="schedule-item">
-              <div className="time">Now</div>
-              <div>
-                <div className="title">{liveTitle}</div>
-                <div className="cat">Live on Eye TV</div>
-              </div>
-            </li>
-          )}
-          {slots.map((s) => (
-            <li className="schedule-item" key={s.id}>
-              <div className="time">
-                <time dateTime={s.startsAt.toISOString()}>
-                  {s.onNow ? 'On now' : formatClock(s.startsAt)}
-                </time>
-              </div>
-              <div>
-                <div className="title">{s.title}</div>
-                {s.categoryName && <div className="cat">{s.categoryName}</div>}
-              </div>
-            </li>
-          ))}
+        <ul className="schedule-list">
+          {slots.map((s) => {
+            const phase = eventPhase(s, now)
+            return (
+              <li className="schedule-item" key={s.id}>
+                <div className="time">
+                  {phase === 'live' ? (
+                    <span className="badge badge-live">
+                      <span className="pulse" />
+                      LIVE
+                    </span>
+                  ) : (
+                    <time dateTime={s.startsAt.toISOString()}>{formatClock(s.startsAt)}</time>
+                  )}
+                </div>
+                <div>
+                  <Link className="title" href={`/tv/live/${s.id}`}>
+                    {s.title}
+                  </Link>
+                  <div className="cat">{[s.categoryName, s.city].filter(Boolean).join(' · ')}</div>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
+      <div className="panel-foot">
+        <Link className="see-all" href="/tv/schedule">
+          Full schedule →
+        </Link>
+      </div>
     </section>
   )
 }

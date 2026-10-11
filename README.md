@@ -11,7 +11,7 @@ The Eye Media Group web platform from the [MVP SRS](https://app.notion.com/p/3d8
 
 **Public site (`/tv`)**
 - Home: live hero, “Up next” schedule, latest reports, editor’s picks, categories.
-- Live page with the programme schedule.
+- **Live:** any number of concurrent streams on `/tv/live`, a watch page per broadcast, and a **Live Schedule** (`/tv/schedule`) with a date strip, city filter and Lagos times.
 - Archive search with category, verification and date filters, plus pagination. Results are shareable URLs and work without JavaScript.
 - Video page with click-to-play YouTube (privacy-enhanced; nothing loads from YouTube until the viewer presses play), related videos, sharing, and SEO/Open Graph/JSON-LD metadata.
 - **Report a story**: citizens submit a story with a video link and contact details, receive a reference number, and the story lands in the moderation queue. Includes rate limiting and a honeypot.
@@ -21,7 +21,7 @@ The Eye Media Group web platform from the [MVP SRS](https://app.notion.com/p/3d8
 - Session login: argon2id password hashing, HttpOnly cookies, rate limiting.
 - **Moderation queue**: a verification checklist must be complete before approving. A note is required to flag or reject. Submitter contact details are shown only to roles allowed to see them.
 - **Video registry**: create, edit, publish and unpublish, with filters and stats.
-- **Live & schedule**: point Eye TV at a YouTube Live broadcast, go live or end, and manage the schedule.
+- **Live & schedule**: schedule live events (city, venue, time, YouTube broadcast), go live, end or cancel several at once, and turn an ended stream into a replay draft. Operator guide: [docs/LIVE-STREAMING.md](docs/LIVE-STREAMING.md).
 - **Audit & history**: every sign-in, moderation decision, edit and publish is recorded.
 - **Staff users**: create, deactivate and reactivate accounts, each with one of five roles.
 

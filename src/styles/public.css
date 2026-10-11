@@ -54,7 +54,9 @@ a.card:hover .play, a.card:focus-visible .play { opacity: 1; }
 .player .unavailable { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--fg-mid); font-weight: 600; font-size: 0.9rem; text-align: center; padding: 20px; }
 
 /* ---------- cards ---------- */
-a.card { display: block; text-decoration: none; color: inherit; }
+/* position: relative keeps absolutely positioned children (e.g. screen-reader text in badges) inside the card;
+   without it they escape horizontal scrollers and widen the whole page on mobile. */
+a.card { display: block; position: relative; text-decoration: none; color: inherit; }
 .card .meta-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; flex-wrap: wrap; }
 .card h3 { font-weight: 700; font-size: 1.02rem; line-height: 1.32; margin: 0 0 6px; }
 a.card:hover h3 { text-decoration: underline; text-decoration-thickness: 2px; text-decoration-color: var(--bright-red); text-underline-offset: 3px; }
@@ -67,7 +69,7 @@ a.card:hover h3 { text-decoration: underline; text-decoration-thickness: 2px; te
 .grid-feature .side-list .meta-row { margin-top: 0; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
-.scroll-row { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.scroll-row { position: relative; display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
 .scroll-row a.card { flex: 0 0 258px; scroll-snap-align: start; }
 
 /* ---------- categories ---------- */
@@ -171,4 +173,65 @@ footer.site .fdots { position: absolute; inset: 0; opacity: 0.05; background-ima
   .hero-copy h1 { font-size: 1.35rem; }
   .footer-grid { grid-template-columns: 1fr; }
   .form-card { padding: 18px; }
+}
+
+/* ---------- live & schedule ---------- */
+.schedule-list { list-style: none; margin: 0; padding: 0; }
+.schedule-item .title { text-decoration: none; }
+.schedule-item .title:hover { text-decoration: underline; }
+.panel-foot { padding: 12px 18px; border-top: 1px solid var(--border); text-align: right; }
+.panel-foot .see-all { font-size: 0.8rem; font-weight: 700; color: var(--fg-mid); text-decoration: none; }
+.panel-foot .see-all:hover { color: var(--fg); }
+
+.live-card-media { position: relative; }
+.live-card-badge { position: absolute; top: 10px; left: 10px; z-index: 1; }
+.empty-state.off-air { aspect-ratio: 16 / 9; display: flex; flex-direction: column; justify-content: center; }
+.empty-state.off-air h1, .empty-state.off-air h2 { font-size: 1.2rem; margin: 0 0 8px; }
+
+.schedule-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.schedule-head h1 { font-weight: 800; font-size: 2rem; margin: 0 0 4px; }
+.schedule-filter { display: flex; align-items: center; gap: 8px; }
+.schedule-filter label { font-size: 0.78rem; font-weight: 700; color: var(--fg-lo); }
+.schedule-filter select { background: var(--surface); color: var(--fg); border: 1px solid var(--border); font-family: inherit; font-size: 0.85rem; padding: 8px 10px; }
+
+.date-strip { display: flex; align-items: stretch; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.date-strip ol { display: flex; flex: 1; list-style: none; margin: 0; padding: 0; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+.date-strip ol::-webkit-scrollbar { display: none; }
+.date-strip li { flex: 1 0 64px; scroll-snap-align: center; }
+.date-strip li a { display: flex; flex-direction: column; align-items: center; padding: 10px 4px; text-decoration: none; color: var(--fg-mid); border-bottom: 3px solid transparent; }
+.date-strip li a:hover { color: var(--fg); }
+.date-strip li a[aria-current='date'] { color: var(--fg); border-bottom-color: var(--bright-red); }
+.date-strip .m, .date-strip .w { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; color: var(--fg-lo); }
+.date-strip .d { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+.date-strip a.is-today .w { color: var(--bright-red); }
+.date-arrow { display: flex; align-items: center; padding: 0 12px; text-decoration: none; color: var(--fg-mid); font-size: 1.2rem; font-weight: 700; }
+.date-arrow:hover { color: var(--fg); background: var(--surface); }
+
+.schedule-group { margin-bottom: 28px; }
+.schedule-group-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; color: var(--fg-lo); text-transform: uppercase; margin: 0 0 6px; }
+.schedule-rows { list-style: none; margin: 0; padding: 0; }
+.schedule-row { display: grid; grid-template-columns: 76px 200px minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.schedule-time time { font-size: 1.35rem; font-weight: 800; }
+.schedule-thumb { position: relative; display: block; }
+.schedule-kicker { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; color: var(--bright-red); text-transform: uppercase; margin-bottom: 4px; }
+.schedule-main h3 { font-size: 1rem; font-weight: 700; line-height: 1.3; margin: 0 0 8px; }
+.schedule-main h3 a { text-decoration: none; }
+.schedule-main h3 a:hover { text-decoration: underline; text-decoration-color: var(--bright-red); }
+.schedule-status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.schedule-desc { margin: 0; color: var(--fg-mid); font-size: 0.86rem; }
+.schedule-row.phase-cancelled .schedule-main h3, .schedule-row.phase-cancelled .schedule-time { text-decoration: line-through; color: var(--fg-lo); }
+
+@media (max-width: 900px) {
+  .schedule-row { grid-template-columns: 64px 160px minmax(0, 1fr); }
+  .schedule-desc { grid-column: 3; }
+}
+@media (max-width: 560px) {
+  .schedule-head h1 { font-size: 1.5rem; }
+  .schedule-row { grid-template-columns: 56px minmax(0, 1fr); gap: 12px; }
+  .schedule-thumb { grid-column: 2; }
+  .schedule-main, .schedule-desc { grid-column: 2; }
+  .schedule-time time { font-size: 1.05rem; }
+  .date-strip li { flex-basis: 52px; }
+  .date-strip .d { font-size: 1.2rem; }
+  .date-arrow { padding: 0 6px; }
 }

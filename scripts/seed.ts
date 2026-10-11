@@ -18,7 +18,7 @@ import { describeError, runMigrations } from './migrate'
 
 const DEMO_YT = 'SlbyzVMQ44w' // public clip used by the prototype to demonstrate playback
 
-const CONTENT_TABLES = ['audit_log', 'schedule_items', 'moderation_reviews', 'submitter_contacts', 'videos']
+const CONTENT_TABLES = ['audit_log', 'live_events', 'schedule_items', 'moderation_reviews', 'submitter_contacts', 'videos']
 
 const HOUR = 3_600_000
 const ago = (h: number) => new Date(Date.now() - h * HOUR)
@@ -158,10 +158,14 @@ async function main() {
     },
   ]
 
+  const publishedIds = new Map<string, string>()
   for (const v of published) {
     const { category, hoursAgo, reporter, ...rest } = v
     const account = staff.find((u) => u.name === reporter)
+    const videoId = randomUUID()
+    publishedIds.set(v.slug, videoId)
     await db.insert(schema.videos).values({
+      id: videoId,
       ...rest,
       categoryId: cat(category),
       providerRef: DEMO_YT,
@@ -224,22 +228,55 @@ async function main() {
     categoryId: cat('community-voices'), source: 'citizen', reporterName: 'Citizen upload', status: 'rejected', createdAt: ago(30),
   })
 
-  await db.update(schema.liveStream).set({
-    title: 'Flood watch: live from Ajah',
-    description: "Streaming from Eye Media's Ajah field desk as officials and volunteers coordinate access routes.",
-    categoryId: cat('environment-sanitation'),
-    youtubeVideoId: DEMO_YT,
-    status: 'live',
-    startedAt: ago(0.5),
-    updatedAt: new Date(),
-  })
-
-  // Schedule: next three slots relative to now, on the half hour.
+  // Live events: two broadcasts on air at once, more scheduled, and yesterday's with a published replay.
   const base = new Date(Math.ceil(Date.now() / (30 * 60_000)) * 30 * 60_000)
-  await db.insert(schema.scheduleItems).values([
-    { startsAt: new Date(base.getTime() + 1 * HOUR), title: 'LASWA briefing on inland waterway ferry safety', categoryId: cat('government-policy') },
-    { startsAt: new Date(base.getTime() + 2.5 * HOUR), title: 'Community desk: Makoko waterfront clean-up, one month on', categoryId: cat('community-voices') },
-    { startsAt: new Date(base.getTime() + 4 * HOUR), title: "Weekly wrap: this week's verified reports", categoryId: null },
+  const replayOf = (slug: string) => publishedIds.get(slug) ?? null
+  await db.insert(schema.liveEvents).values([
+    {
+      id: randomUUID(), title: 'Flood watch: live from Ajah', status: 'live', featured: true,
+      description: "Streaming from Eye Media's Ajah field desk as officials and volunteers coordinate access routes.",
+      categoryId: cat('environment-sanitation'), city: 'Lagos', venue: 'Ajah field desk', providerRef: DEMO_YT,
+      startsAt: ago(0.5), startedAt: ago(0.5),
+    },
+    {
+      id: randomUUID(), title: 'Lagos Assembly plenary: okada ban debate', status: 'live',
+      description: 'Live from the Lagos State House of Assembly as lawmakers debate the proposed expansion of the okada ban.',
+      categoryId: cat('government-policy'), city: 'Lagos', venue: 'Alausa, Ikeja', providerRef: DEMO_YT,
+      startsAt: ago(1), startedAt: ago(0.9),
+    },
+    {
+      id: randomUUID(), title: 'LASWA briefing on inland waterway ferry safety', status: 'scheduled',
+      description: 'Lagos State Waterways Authority briefs the press on new ferry safety rules.',
+      categoryId: cat('government-policy'), city: 'Lagos', venue: 'Marina', providerRef: DEMO_YT,
+      startsAt: new Date(base.getTime() + 1 * HOUR),
+    },
+    {
+      id: randomUUID(), title: 'Community desk: Makoko waterfront clean-up, one month on', status: 'scheduled',
+      categoryId: cat('community-voices'), city: 'Lagos', venue: 'Makoko', startsAt: new Date(base.getTime() + 2.5 * HOUR),
+    },
+    {
+      id: randomUUID(), title: 'Abuja: Senate committee hearing on transport funding', status: 'scheduled',
+      description: 'Coverage from the National Assembly as the committee questions transport agencies.',
+      categoryId: cat('government-policy'), city: 'Abuja', venue: 'National Assembly', startsAt: new Date(base.getTime() + 3 * HOUR),
+    },
+    {
+      id: randomUUID(), title: "Weekly wrap: this week's verified reports", status: 'scheduled',
+      startsAt: new Date(base.getTime() + 4 * HOUR),
+    },
+    {
+      id: randomUUID(), title: 'Port Harcourt: Rumuokoro flyover traffic update', status: 'scheduled',
+      categoryId: cat('traffic-transport'), city: 'Port Harcourt', startsAt: new Date(base.getTime() + 24 * HOUR),
+    },
+    {
+      id: randomUUID(), title: 'Mile 12 market fire: live response coverage', status: 'ended',
+      description: 'Live coverage as emergency services responded to the overnight fire.',
+      categoryId: cat('public-safety'), city: 'Lagos', venue: 'Mile 12', providerRef: DEMO_YT,
+      startsAt: ago(26), startedAt: ago(26), endedAt: ago(25.4), replayVideoId: replayOf('mile-12-market-fire-traders-count-losses'),
+    },
+    {
+      id: randomUUID(), title: 'Ibadan: Dugbe market traders forum', status: 'cancelled',
+      categoryId: cat('community-voices'), city: 'Ibadan', startsAt: ago(22),
+    },
   ])
 
   const admin = staff[0] ?? { id: null, name: 'Paxofi Technologies' }
@@ -247,7 +284,7 @@ async function main() {
     { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'moderation.approved', targetType: 'video', targetLabel: published[0]!.title, notes: 'Cleared verification checklist', createdAt: ago(1) },
     { actorId: personId('Tunde Balogun'), actorName: 'Tunde Balogun', action: 'video.created', targetType: 'video', targetId: danfo.id, targetLabel: danfo.title, createdAt: ago(0.2) },
     { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'moderation.flagged', targetType: 'video', targetId: ojota.id, targetLabel: ojota.title, notes: 'Possible duplicate of an existing report', createdAt: ago(0.5) },
-    { actorId: personId('Ngozi Fadipe'), actorName: 'Ngozi Fadipe', action: 'live.started', targetType: 'live', targetId: '1', targetLabel: 'Flood watch: live from Ajah', createdAt: ago(0.5) },
+    { actorId: personId('Ngozi Fadipe'), actorName: 'Ngozi Fadipe', action: 'live.started', targetType: 'live_event', targetLabel: 'Flood watch: live from Ajah', createdAt: ago(0.5) },
     { actorId: personId('Chiamaka Obi'), actorName: 'Chiamaka Obi', action: 'video.updated', targetType: 'video', targetId: alaba.id, targetLabel: alaba.title, notes: 'Marked as sensitive', createdAt: ago(0.9) },
     { actorId: admin.id, actorName: admin.name, action: 'user.created', targetType: 'user', targetLabel: 'editor@eyemedia.local', notes: 'Role: editor', createdAt: ago(200) },
   ])

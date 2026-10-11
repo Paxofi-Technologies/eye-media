@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { STATUS_OPTIONS, StatusPill } from '@/components/admin/StatusPill'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import type { VideoStatus } from '@/db/schema'
-import { REGISTRY_PAGE_SIZE, getLiveSettings, getVideoStats, listVideos } from '@/lib/admin'
+import { REGISTRY_PAGE_SIZE, getLiveCount, getVideoStats, listVideos } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatCount, timeAgo } from '@/lib/format'
 import { can } from '@/lib/rbac'
@@ -23,10 +23,10 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
   const status = STATUS_OPTIONS.some(([s]) => s === sp.status) ? (sp.status as VideoStatus) : null
   const page = Math.max(1, Number.parseInt(sp.page ?? '', 10) || 1)
 
-  const [stats, categories, live, { rows, total }] = await Promise.all([
+  const [stats, categories, liveCount, { rows, total }] = await Promise.all([
     getVideoStats(),
     getCategories(),
-    getLiveSettings(),
+    getLiveCount(),
     listVideos({ q, categoryId, status, page }),
   ])
   const pages = Math.max(1, Math.ceil(total / REGISTRY_PAGE_SIZE))
@@ -63,7 +63,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
           <div className="l">Awaiting review</div>
         </Link>
         <Link className="stat-card" href="/admin/live">
-          <div className="n">{live?.status === 'live' ? 1 : 0}</div>
+          <div className="n">{liveCount}</div>
           <div className="l">Live now</div>
         </Link>
         <Link className="stat-card" href="/admin/videos?status=rejected">

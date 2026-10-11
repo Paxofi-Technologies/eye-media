@@ -175,6 +175,44 @@ export const scheduleItems = mysqlTable(
   (t) => [index('schedule_items_starts_idx').on(t.startsAt)],
 )
 
+/**
+ * Live events: any number of scheduled/concurrent broadcasts (one per location, camera or phone).
+ * Replaces the single `live_stream` row + `schedule_items`, which are kept read-only until a later
+ * release drops them (their data is copied here by migration 0003).
+ */
+export const LIVE_EVENT_STATUSES = ['scheduled', 'live', 'ended', 'cancelled'] as const
+
+export const liveEvents = mysqlTable(
+  'live_events',
+  {
+    id: id(),
+    title: varchar('title', { length: 200 }).notNull(),
+    description: text('description'),
+    categoryId: ref('category_id').references(() => videoCategories.id, { onDelete: 'set null' }),
+    // City/venue shown on the schedule and used by its location filter, e.g. "Lagos", "Abuja".
+    city: varchar('city', { length: 80 }),
+    venue: varchar('venue', { length: 160 }),
+    provider: mysqlEnum('provider', ['youtube']).notNull().default('youtube'),
+    // Public YouTube video id of the broadcast. Stream keys never live in Eye TV.
+    providerRef: varchar('provider_ref', { length: 64 }),
+    status: mysqlEnum('status', LIVE_EVENT_STATUSES).notNull().default('scheduled'),
+    featured: boolean('featured').notNull().default(false),
+    startsAt: ts('starts_at').notNull(),
+    endsAt: ts('ends_at'),
+    startedAt: ts('started_at'),
+    endedAt: ts('ended_at'),
+    // Archive copy published after the event (goes through the normal video workflow).
+    replayVideoId: ref('replay_video_id').references(() => videos.id, { onDelete: 'set null' }),
+    createdBy: ref('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().$defaultFn(now),
+    updatedAt: ts('updated_at').notNull().$defaultFn(now),
+  },
+  (t) => [
+    index('live_events_starts_idx').on(t.startsAt),
+    index('live_events_status_idx').on(t.status, t.startsAt),
+  ],
+)
+
 /* ------------------------------------------------------------------ */
 /* Audit                                                               */
 /* ------------------------------------------------------------------ */
@@ -201,3 +239,5 @@ export type Role = (typeof ROLES)[number]
 export type Video = typeof videos.$inferSelect
 export type VideoStatus = (typeof VIDEO_STATUSES)[number]
 export type VideoCategory = typeof videoCategories.$inferSelect
+export type LiveEvent = typeof liveEvents.$inferSelect
+export type LiveEventStatus = (typeof LIVE_EVENT_STATUSES)[number]

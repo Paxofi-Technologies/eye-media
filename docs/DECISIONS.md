@@ -19,6 +19,7 @@ target backend, Vite removed) was approved by the owner on 10 Oct 2026. See [ARC
 | D12 | **Styling in plain CSS with brand tokens** (ported from the prototype) | The Figma redesign is expected soon, so this keeps the swap cheap and avoids committing to a CSS framework the designer may not use. |
 | D13 | **Staging at eyetv.paxofi.com, closed to search engines** (`SITE_INDEXING` off) | The same release later moves to the production domain with `SITE_INDEXING=true`. Staging can't be indexed and compete with the real site. |
 | D14 | **Backend: PCF v1.1.0 is the target. Eye TV ships first with an interim Next.js server layer.** | Owner decision, 10 Oct 2026: keep momentum now and move to PCF once concluded. Pages only call query modules and server actions, so the backend can be swapped behind them. Plan in [ARCHITECTURE.md](ARCHITECTURE.md). |
+| D15 | **Concurrent live broadcasts as `live_events`** (any number live at once), each mapped to its own YouTube Live broadcast and stream key, plus a public Live Schedule | Owner need: several locations and devices live simultaneously. YouTube supports multiple concurrent broadcasts per channel at no cost. Paid platforms (Mux, Cloudflare Stream, Amazon IVS) remain an option through the `provider` field when browser-based phone streaming, own branding or API automation is required. See [LIVE-STREAMING.md](LIVE-STREAMING.md). |
 
 ## Open items for the product owner / client (SRS §13)
 

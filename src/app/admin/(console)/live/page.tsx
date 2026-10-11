@@ -1,78 +1,109 @@
 import type { Metadata } from 'next'
-import { deleteScheduleItem, setLiveStatus } from '@/app/admin/actions'
-import { LiveSettingsForm, ScheduleForm } from '@/components/admin/LiveForms'
+import Link from 'next/link'
+import { LiveEventActions } from '@/components/admin/LiveEventActions'
+import { LiveEventForm } from '@/components/admin/LiveForms'
 import { Restricted } from '@/components/admin/Restricted'
-import { getLiveSettings, getScheduleForStaff } from '@/lib/admin'
+import { listLiveEventsForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
-import { formatClock, formatDateTime } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
 import { can } from '@/lib/rbac'
-import { getCategories } from '@/lib/tv'
+import { requestTime } from '@/lib/schedule'
+import { getCategories, getScheduleCities } from '@/lib/tv'
 
 export const metadata: Metadata = { title: 'Live & Schedule' }
+
+const STATUS_PILL: Record<string, string> = {
+  live: 'status-live',
+  scheduled: 'status-pending',
+  ended: 'status-draft',
+  cancelled: 'status-rejected',
+}
 
 export default async function LiveAdminPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireStaff()
   if (!can(user.role, 'live.manage')) {
     return <Restricted title="Not available for your role">Ask an editor or media manager to manage live streams.</Restricted>
   }
-  const [live, schedule, categories, sp] = await Promise.all([getLiveSettings(), getScheduleForStaff(), getCategories(), searchParams])
-  const isLive = live?.status === 'live'
+  const [events, categories, cities, sp] = await Promise.all([
+    listLiveEventsForStaff(),
+    getCategories(),
+    getScheduleCities(),
+    searchParams,
+  ])
+  const now = requestTime().getTime()
+  const live = events.filter((e) => e.status === 'live')
+  const upcoming = events.filter((e) => e.status !== 'live' && (e.status === 'scheduled' || e.startsAt.getTime() >= now))
+  const recent = events.filter((e) => !live.includes(e) && !upcoming.includes(e)).reverse()
+  const canMakeReplay = can(user.role, 'video.edit')
+
+  const table = (title: string, rows: typeof events) => (
+    <section className="form-panel" aria-label={title}>
+      <h2>
+        {title} ({rows.length})
+      </h2>
+      {rows.length === 0 ? (
+        <p className="field-hint">None.</p>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">When (WAT)</th>
+                <th scope="col">Event</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((e) => (
+                <tr key={e.id}>
+                  <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{formatDateTime(e.startsAt)}</td>
+                  <td>
+                    <div className="cell-title">
+                      <Link href={`/admin/live/${e.id}`}>{e.title}</Link>
+                      {e.featured && <span className="cell-sub"> · featured</span>}
+                    </div>
+                    <div className="cell-sub">
+                      {[e.categoryName, e.city, e.venue].filter(Boolean).join(' · ') || '—'}
+                      {!e.providerRef && ' · no YouTube video yet'}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`status-pill ${STATUS_PILL[e.status]}`}>{e.status}</span>
+                  </td>
+                  <td>
+                    <LiveEventActions event={e} canMakeReplay={canMakeReplay} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
 
   return (
     <>
       <div className="admin-topbar">
         <div>
           <h1>Live &amp; Schedule</h1>
-          <div className="sub">Configure the YouTube Live broadcast that powers the public Live page, and the programme schedule.</div>
+          <div className="sub">
+            Any number of broadcasts can be live at once. Each event gets its own YouTube Live video, from any camera or phone.
+          </div>
         </div>
+        <Link className="btn btn-ghost" href="/tv/schedule" target="_blank">
+          View public schedule ↗
+        </Link>
       </div>
       {sp.error && <div className="alert alert-error" role="alert">{sp.error.slice(0, 200)}</div>}
-
       <div className="two-col">
-        <div>
-          <LiveSettingsForm initial={live} categories={categories} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {table('Live now', live)}
+          {table('Upcoming', upcoming)}
+          {table('Last 7 days', recent)}
         </div>
-        <div>
-          <div className={isLive ? 'live-status-card is-live' : 'live-status-card'}>
-            <span className="dot-big" aria-hidden="true" />
-            <span className="status-word">{isLive ? 'LIVE ON EYE TV' : 'OFF AIR'}</span>
-            {isLive && live?.startedAt && (
-              <div style={{ color: 'var(--fg-lo)', fontSize: '0.8rem', marginTop: 8 }}>Started {formatClock(live.startedAt)}</div>
-            )}
-            <form action={setLiveStatus}>
-              <input type="hidden" name="status" value={isLive ? 'offline' : 'live'} />
-              <button className={isLive ? 'btn btn-ghost' : 'btn btn-primary'} type="submit">
-                {isLive ? 'End stream on Eye TV' : 'Go live on Eye TV'}
-              </button>
-            </form>
-            <p className="field-hint">Start the broadcast in YouTube Studio first, then switch Eye TV to live.</p>
-          </div>
-
-          {can(user.role, 'schedule.manage') && (
-            <div className="form-panel" style={{ marginTop: 16 }}>
-              <h2>Schedule</h2>
-              {schedule.length === 0 ? (
-                <p className="field-hint">No upcoming programmes.</p>
-              ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px' }}>
-                  {schedule.map((s) => (
-                    <li key={s.id} className="cell-flex" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                      <div>
-                        <div className="cell-title" style={{ fontSize: '0.85rem' }}>{s.title}</div>
-                        <div className="cell-sub">{formatDateTime(s.startsAt)}{s.categoryName ? ` · ${s.categoryName}` : ''}</div>
-                      </div>
-                      <form action={deleteScheduleItem}>
-                        <input type="hidden" name="id" value={s.id} />
-                        <button className="btn btn-ghost btn-sm" type="submit" aria-label={`Remove ${s.title}`}>Remove</button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <ScheduleForm categories={categories} />
-            </div>
-          )}
-        </div>
+        <LiveEventForm initial={null} categories={categories} cities={cities} />
       </div>
     </>
   )
