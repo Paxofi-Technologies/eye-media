@@ -17,9 +17,10 @@ nav.primary a:hover { color: var(--fg); }
 
 /* ---------- ticker ---------- */
 .ticker { background: var(--bright-red); color: var(--white); overflow: hidden; white-space: nowrap; }
-.ticker-inner { display: flex; align-items: center; padding: 7px 0; }
-.ticker-label { flex-shrink: 0; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em; padding: 0 16px; border-right: 1px solid rgba(255, 255, 255, 0.4); }
-.ticker-track { display: flex; gap: 44px; animation: scroll-left 40s linear infinite; padding-left: 24px; }
+.ticker-inner { display: flex; align-items: stretch; }
+.ticker-label { flex-shrink: 0; position: relative; z-index: 1; align-self: stretch; display: flex; align-items: center; background: var(--deep-red); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em; padding: 0 16px; }
+/* The label sits above the scrolling headlines so they pass behind it instead of over it. */
+.ticker-track { display: flex; gap: 44px; animation: scroll-left 40s linear infinite; padding: 7px 0 7px 24px; }
 .ticker-track a { font-size: 0.8rem; font-weight: 500; text-decoration: none; }
 .ticker-track a:hover { text-decoration: underline; }
 .ticker:hover .ticker-track { animation-play-state: paused; }
