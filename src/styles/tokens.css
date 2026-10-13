@@ -1,0 +1,60 @@
+/*
+ * Eye Media Group design tokens (Brand Guidelines v1.0, 2026).
+ * This is the single place to update when the Figma visual designs land:
+ * components only reference these variables, never raw colours.
+ */
+:root {
+  --brand-red: #a31111; /* trust, authority, impact */
+  --deep-red: #7a0c0c; /* boldness, credibility, seriousness */
+  --charcoal: #0b0b0b; /* strength, stability, focus */
+  --bright-red: #e10600; /* alert, energy, attention */
+  --white: #ffffff;
+  --light-gray: #e5e5e5;
+
+  --bg: var(--charcoal);
+  --surface: #141414;
+  --surface-raised: #1c1c1c;
+  --border: #2c2c2c;
+  --fg: var(--white);
+  --fg-mid: var(--light-gray);
+  --fg-lo: #8c8c8c;
+
+  --success: #2f8f52;
+  --success-hover: #257241;
+  --success-fg: #7bd79a;
+  --warning-fg: #ffc24b;
+  --danger-fg: #ff6b60;
+
+  --font: var(--font-montserrat), 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial,
+    sans-serif;
+  --max-w: 1180px;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --bg: #f4f4f2;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #dcdcdc;
+    --fg: #101010;
+    --fg-mid: #3a3a3a;
+    --fg-lo: #6e6e6e;
+    --success-fg: #1f7a42;
+    --warning-fg: #9a6400;
+    --danger-fg: #b3140c;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: var(--charcoal);
+  --surface: #141414;
+  --surface-raised: #1c1c1c;
+  --border: #2c2c2c;
+  --fg: var(--white);
+  --fg-mid: var(--light-gray);
+  --fg-lo: #8c8c8c;
+  color-scheme: dark;
+}
