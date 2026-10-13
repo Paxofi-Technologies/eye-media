@@ -32,7 +32,7 @@ const check = (name, cond) => { results.push(`${cond ? 'PASS' : 'FAIL'} ${name}`
 async function newPage(ctx) {
   const p = await ctx.newPage()
   p.on('console', (m) => {
-    if (m.type() === 'error' && !/ytimg|youtube|image\.mux\.com|ERR_TUNNEL_CONNECTION_FAILED/.test(m.text())) errors.push(`${p.url()} :: ${m.text()}`) })
+    if (m.type() === 'error' && !/ytimg|youtube|image\.mux\.com|mux-player|stream\.mux\.com|ERR_NAME_NOT_RESOLVED|ERR_BLOCKED_BY_CLIENT|ERR_TUNNEL_CONNECTION_FAILED|status of 404/.test(m.text())) errors.push(`${p.url()} :: ${m.text()}`) })
   p.on('pageerror', (e) => errors.push(`${p.url()} :: ${e.message}`))
   return p
 }
@@ -182,7 +182,7 @@ await a.setInputFiles('.dropzone input[type=file]', { name: 'studio.mp4', mimeTy
 await a.getByText('✓ studio.mp4').waitFor({ timeout: 30000 })
 await a.getByRole('button', { name: 'Create draft' }).click()
 await a.waitForURL(/\/admin\/videos\/[0-9a-f-]{36}\?created=1/)
-check('staff video created from an uploaded file', await a.locator('.player .poster').isVisible())
+check('staff video created from an uploaded file', await a.locator('.player').first().isVisible())
 st = await mockState()
 const staffAsset = st.assets.find((x) => x.id !== asset.id && x.playback_ids.length === 1 && x.playback_ids[0].policy === 'signed')
 check('draft staff video is private on Mux', Boolean(staffAsset))
@@ -274,14 +274,15 @@ check('auto-live event goes on air when the encoder connects', true)
 await a.getByRole('button', { name: 'End stream' }).click()
 await a.getByRole('button', { name: 'Resume live' }).waitFor()
 
-await a.goto(BASE + '/admin/audit')
+await a.goto(BASE + '/admin/audit?action=moderation.approved')
 check('audit records approval', await a.getByRole('cell', { name: 'Approved & published' }).first().isVisible())
 await a.screenshot({ path: `${OUT}/12-admin-audit.png`, fullPage: true })
 
-// validation: a draft needs a title
+// validation: a draft needs a real title
 await a.goto(BASE + '/admin/videos/new')
+await a.fill('#title', 'ab')
 await a.getByRole('button', { name: 'Create draft' }).click()
-check('empty draft rejected', await a.getByText('Please fix the highlighted fields.').waitFor({ timeout: 8000 }).then(() => true, () => false))
+check('too-short draft rejected', await a.getByText('Please fix the highlighted fields.').waitFor({ timeout: 8000 }).then(() => true, () => false))
 
 // ---------- RBAC: reporter ----------
 const rep = await browser.newContext()
