@@ -272,7 +272,7 @@ await a.goto(autoUrl)
 await a.getByRole('button', { name: 'End stream' }).waitFor({ timeout: 10000 })
 check('auto-live event goes on air when the encoder connects', true)
 await a.getByRole('button', { name: 'End stream' }).click()
-await a.getByRole('button', { name: 'Go live' }).waitFor()
+await a.getByRole('button', { name: 'Resume live' }).waitFor()
 
 await a.goto(BASE + '/admin/audit')
 check('audit records approval', await a.getByRole('cell', { name: 'Approved & published' }).first().isVisible())

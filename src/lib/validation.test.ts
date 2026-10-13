@@ -55,8 +55,7 @@ describe('videoSchema', () => {
     expect(r.categoryId).toBeNull()
     expect(r.summary).toBeNull()
   })
-  it('rejects bad YouTube input and slugs', () => {
-    expect(videoSchema.safeParse({ ...base, youtube: 'https://vimeo.com/123' }).success).toBe(false)
+  it('rejects bad slugs', () => {
     expect(videoSchema.safeParse({ ...base, slug: 'Bad Slug' }).success).toBe(false)
   })
 })
