@@ -4,6 +4,7 @@ import { LiveEventCard } from '@/components/tv/LiveEventCard'
 import { Player } from '@/components/tv/Player'
 import { SchedulePanel } from '@/components/tv/Schedule'
 import { VideoCard } from '@/components/tv/VideoCard'
+import { playbackForEvent } from '@/lib/playback-server'
 import { formatClock } from '@/lib/format'
 import { requestTime } from '@/lib/schedule'
 import { getLatest, getLiveEvents, getUpcomingEvents } from '@/lib/tv'
@@ -26,7 +27,7 @@ export default async function LivePage() {
           <div>
             {main ? (
               <>
-                <Player youtubeId={main.providerRef} title={main.title} live />
+                <Player source={playbackForEvent(main, { preview: false })} title={main.title} live />
                 <div className="hero-copy">
                   <div className="meta-row">
                     {main.categoryName && <span className="badge badge-cat">{main.categoryName}</span>}

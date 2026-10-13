@@ -28,3 +28,9 @@ target backend, Vite removed) was approved by the owner on 10 Oct 2026. See [ARC
 - Production YouTube channel for Eye TV, plus who holds the channel credentials.
 - Production domain. (cPanel with Node.js 22 is confirmed, and staging will be eyetv.paxofi.com.)
 - Whether direct video upload (rather than links) is needed for MVP. That would need storage and a size policy.
+
+## D16 — Mux for all video and live streaming (replaces YouTube)
+**Decision:** Uploads, archive playback and live streams run on Mux; YouTube is no longer used for hosting.
+**Why:** a YouTube takedown or account strike must not remove the platform's content; full control of the player; private-until-published media; per-event live streams with optional simulcast to YouTube/Facebook for reach.
+**How:** unpublished media has only a *signed* playback id; a *public* id is added on publish / go-live and removed on unpublish / end. Private ids are never sent to public pages. Webhooks (HMAC-verified, de-duplicated) keep status in step. Stream keys are never stored.
+**Trade-offs:** usage-based cost (delivery dominates at election scale); dependency on Mux availability; legacy YouTube/local rows are kept playable until migrated (phase 2 removes that code).

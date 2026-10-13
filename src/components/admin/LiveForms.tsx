@@ -15,7 +15,7 @@ export type LiveEventFormValues = {
   venue: string | null
   startsAt: Date
   endsAt: Date | null
-  providerRef: string | null
+  autoLive: boolean
   featured: boolean
 }
 
@@ -87,14 +87,6 @@ export function LiveEventForm({
             </select>
           )}
         </Field>
-        <Field
-          id="le-yt"
-          label="YouTube Live video"
-          hint="Watch URL or id of this broadcast in YouTube Studio. Required before going live."
-          error={e.youtube}
-        >
-          {(p) => <input {...p} name="youtube" maxLength={200} defaultValue={v?.providerRef ?? ''} placeholder="https://youtube.com/live/…" />}
-        </Field>
       </div>
       <Field id="le-desc" label="Description" error={e.description}>
         {(p) => <textarea {...p} name="description" maxLength={2000} rows={3} defaultValue={v?.description ?? ''} />}
@@ -102,7 +94,10 @@ export function LiveEventForm({
       <label className="check">
         <input type="checkbox" name="featured" defaultChecked={v?.featured} /> Feature on the homepage when live
       </label>
-      <p className="field-hint">Stream keys and ingest URLs stay in YouTube Studio / OBS / the phone app and are never stored in Eye TV.</p>
+      <label className="check">
+        <input type="checkbox" name="autoLive" defaultChecked={v?.autoLive} /> Go live automatically when the encoder connects
+      </label>
+      <p className="field-hint">The stream key is created by Mux and is never stored in Eye TV. Open the event after saving to see the encoder settings.</p>
       <button className="btn btn-primary" type="submit" disabled={pending} style={{ marginTop: 8 }}>
         {pending ? 'Saving…' : v ? 'Save changes' : 'Add to schedule'}
       </button>

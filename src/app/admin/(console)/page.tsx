@@ -5,9 +5,9 @@ import { z } from 'zod'
 import { Restricted } from '@/components/admin/Restricted'
 import { ReviewForm } from '@/components/admin/ReviewForm'
 import { StatusPill } from '@/components/admin/StatusPill'
+import { publishBlocker } from '@/lib/publish'
 import { Player } from '@/components/tv/Player'
-import { mediaSource } from '@/lib/media'
-import { thumbnailFor } from '@/components/tv/Thumb'
+import { playbackForVideo, staffThumbnail } from '@/lib/playback-server'
 import { getModerationHistory, getQueue, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatDateTime, formatDuration, timeAgo } from '@/lib/format'
@@ -75,7 +75,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
       <div className="q-layout">
         <div className="q-list" role="list" aria-label="Items awaiting review">
           {queue.map((q) => {
-            const thumb = thumbnailFor(q)
+            const thumb = staffThumbnail(q)
             return (
               <Link
                 role="listitem"
@@ -100,7 +100,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
 
         {v && selected ? (
           <section className="review-panel" aria-label="Review">
-            <Player {...mediaSource(v.provider, v.providerRef)} title={v.title} />
+            <Player source={playbackForVideo(v, { preview: true })} title={v.title} />
             <h2>{v.title}</h2>
             <div className="kv-row">
               <span className="k">Status</span>
@@ -156,12 +156,8 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
               <ReviewForm
                 key={v.id}
                 videoId={v.id}
-                canPublish={!!v.providerRef && !!v.categoryId}
-                publishHint={
-                  !v.providerRef
-                    ? 'Before approving, attach the video (upload the file or add a YouTube link) via "Edit video".'
-                    : null
-                }
+                canPublish={!publishBlocker(v)}
+                publishHint={publishBlocker(v)}
               />
             ) : (
               <p className="field-hint">This item is no longer in the queue.</p>

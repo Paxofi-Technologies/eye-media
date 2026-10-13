@@ -9,7 +9,7 @@
 | Backend / business logic | **Interim:** Next.js server code (server actions + query modules) | **PCF v1.1.0** (PHP 8.4 modular monolith), EyeTV module |
 | Database | MySQL 8 / MariaDB 10.6+ | same database, same tables |
 | Hosting | cPanel *Setup Node.js App* (Node 22) | Node app plus a PCF PHP app on the same cPanel, then a VPS later |
-| Media | YouTube VOD + YouTube Live, with a provider field ready for others | same |
+| Media | Mux (direct uploads, signed/private playback, live streams, webhooks). Old YouTube/local-file rows still play until removed | same |
 
 The owner chose to **continue with the current build** and move the backend to PCF v1.1.0 later, once that work is
 concluded. Public pages and admin screens stay in Next.js permanently. Only the data layer underneath them changes.

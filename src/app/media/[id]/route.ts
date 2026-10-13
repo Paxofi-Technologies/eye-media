@@ -5,20 +5,21 @@ import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@/db'
 import { getCurrentUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
-import { getUploadMeta, uploadPath } from '@/lib/uploads'
+import { getLegacyUploadMeta, legacyUploadPath } from '@/lib/uploads'
 
 export const dynamic = 'force-dynamic'
 
 const notFound = () => new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } })
 
 /**
- * Streams an uploaded video with HTTP Range support (needed for seeking and for iOS Safari).
+ * LEGACY: streams a video uploaded to this server before Mux, with HTTP Range support (needed for seeking and for iOS Safari).
  * Public only once the video it belongs to is published; until then, staff only.
  */
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const meta = await getUploadMeta(id)
-  if (!meta || meta.status === 'uploading') return notFound()
+  const meta = await getLegacyUploadMeta(id)
+  const file = legacyUploadPath(id)
+  if (!meta || !file || meta.status === 'uploading') return notFound()
 
   const [published] = await db
     .select({ id: schema.videos.id })
@@ -32,7 +33,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   let size: number
   try {
-    size = (await stat(uploadPath(id))).size
+    size = (await stat(file)).size
   } catch {
     return notFound()
   }
@@ -64,11 +65,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
     headers.set('Content-Range', `bytes ${start}-${end}/${size}`)
     headers.set('Content-Length', String(end - start + 1))
-    const stream = Readable.toWeb(createReadStream(uploadPath(id), { start, end })) as ReadableStream
+    const stream = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream
     return new Response(stream, { status: 206, headers })
   }
 
   headers.set('Content-Length', String(size))
-  const stream = Readable.toWeb(createReadStream(uploadPath(id))) as ReadableStream
+  const stream = Readable.toWeb(createReadStream(file)) as ReadableStream
   return new Response(stream, { status: 200, headers })
 }

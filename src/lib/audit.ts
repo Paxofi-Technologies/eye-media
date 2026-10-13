@@ -22,6 +22,11 @@ export type AuditAction =
   | 'live.event_updated'
   | 'live.event_deleted'
   | 'live.replay_created'
+  | 'live.stream_created'
+  | 'live.key_viewed'
+  | 'live.key_reset'
+  | 'live.simulcast_added'
+  | 'live.simulcast_removed'
   | 'schedule.created'
   | 'schedule.deleted'
   | 'user.created'
@@ -48,6 +53,11 @@ export const AUDIT_LABELS: Record<AuditAction, string> = {
   'live.event_updated': 'Edited live event',
   'live.event_deleted': 'Deleted live event',
   'live.replay_created': 'Created replay from live event',
+  'live.stream_created': 'Created Mux live stream',
+  'live.key_viewed': 'Viewed stream key',
+  'live.key_reset': 'Reset stream key',
+  'live.simulcast_added': 'Added simulcast destination',
+  'live.simulcast_removed': 'Removed simulcast destination',
   'schedule.created': 'Added schedule slot',
   'schedule.deleted': 'Removed schedule slot',
   'user.created': 'Created staff user',

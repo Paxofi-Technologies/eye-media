@@ -13,8 +13,10 @@ export type VideoFormValues = {
   summary: string | null
   description: string | null
   categoryId: string | null
-  provider: 'youtube' | 'upload'
+  provider: 'youtube' | 'upload' | 'mux'
   providerRef: string | null
+  mediaStatus: 'ready' | 'processing' | 'errored'
+  status: string
   durationSeconds: number | null
   location: string | null
   tags: string[]
@@ -30,13 +32,11 @@ export function VideoForm({
   categories,
   canEdit,
   uploadsEnabled,
-  currentUploadName = null,
 }: {
   initial: VideoFormValues | null
   categories: { id: string; name: string }[]
   canEdit: boolean
   uploadsEnabled: boolean
-  currentUploadName?: string | null
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveVideo, { ok: false, message: null })
   const e = state.errors ?? {}
@@ -91,40 +91,37 @@ export function VideoForm({
 
         <div className="form-panel">
           <h2>Video</h2>
-          {uploadsEnabled && canEdit && (
-            <VideoUpload
-              purpose="staff"
-              label={v?.provider === 'upload' ? 'Replace the uploaded video' : 'Upload a video file'}
-              current={v?.provider === 'upload' ? (currentUploadName ?? 'uploaded video') : null}
-            />
-          )}
+          <p className="field-hint" style={{ marginTop: -6 }}>
+            {!v?.id
+              ? 'No video yet.'
+              : v.provider === 'mux'
+                ? v.mediaStatus === 'ready'
+                  ? 'Current video: ready to play.'
+                  : v.mediaStatus === 'processing'
+                    ? 'Current video: still processing (usually a few minutes). This page updates when it is ready.'
+                    : 'Current video: processing failed. Upload the file again.'
+                : v.provider === 'youtube' && v.providerRef
+                  ? 'Current video: a legacy YouTube video. Upload the file to replace it.'
+                  : v.provider === 'upload'
+                    ? 'Current video: a file stored on this server (legacy). Upload the file again to move it to Mux.'
+                    : 'No video yet.'}
+          </p>
+          {canEdit && v?.status === 'published' ? (
+            <p className="field-hint">To replace the video, unpublish this story first.</p>
+          ) : uploadsEnabled && canEdit ? (
+            <VideoUpload purpose="staff" label={v?.id ? 'Replace the video' : 'Upload a video file'} />
+          ) : canEdit ? (
+            <div className="alert alert-info" role="status">
+              Video upload isn&apos;t set up yet. Add the Mux access token and signing key (see the Mux setup guide), then restart the app.
+            </div>
+          ) : null}
           {e.upload && (
             <div className="field-error" role="alert" style={{ marginTop: -8, marginBottom: 12 }}>
               {e.upload}
             </div>
           )}
           <div className="field-row">
-            <Field
-              id="youtube"
-              label={uploadsEnabled ? 'Or a YouTube video' : 'YouTube video'}
-              hint={
-                v?.provider === 'upload'
-                  ? 'Leave empty to keep the uploaded file. Entering a YouTube link replaces it.'
-                  : 'Video id or any YouTube URL from the Eye TV channel.'
-              }
-              error={e.youtube}
-            >
-              {(p) => (
-                <input
-                  {...p}
-                  name="youtube"
-                  maxLength={200}
-                  defaultValue={v?.provider === 'youtube' ? (v.providerRef ?? '') : ''}
-                  placeholder="https://youtu.be/…"
-                />
-              )}
-            </Field>
-            <Field id="duration" label="Duration" hint="m:ss or h:mm:ss" error={e.duration}>
+            <Field id="duration" label="Duration" hint="Filled in automatically from the video. m:ss or h:mm:ss" error={e.duration}>
               {(p) => <input {...p} name="duration" maxLength={12} defaultValue={formatDuration(v?.durationSeconds) ?? ''} />}
             </Field>
           </div>

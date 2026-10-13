@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { parseYouTubeId } from './youtube'
 import { parseDuration } from './format'
 import { SLUG_PATTERN } from './slug'
 
@@ -99,19 +98,6 @@ export const videoSchema = z.object({
   summary: optionalText(400),
   description: optionalText(10000),
   categoryId: optionalUuid,
-  youtube: z
-    .string()
-    .trim()
-    .max(200)
-    .transform((v, ctx) => {
-      if (v === '') return null
-      const id = parseYouTubeId(v)
-      if (!id) {
-        ctx.addIssue({ code: 'custom', message: 'Enter a YouTube video id or URL.' })
-        return z.NEVER
-      }
-      return id
-    }),
   duration: z
     .string()
     .trim()
@@ -169,21 +155,6 @@ const lagosDateTime = z
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Pick a date and time.')
   .transform((v) => new Date(`${v}:00+01:00`))
 
-const youtubeField = (message: string) =>
-  z
-    .string()
-    .trim()
-    .max(200)
-    .transform((v, ctx) => {
-      if (v === '') return null
-      const id = parseYouTubeId(v)
-      if (!id) {
-        ctx.addIssue({ code: 'custom', message })
-        return z.NEVER
-      }
-      return id
-    })
-
 export const liveEventSchema = z
   .object({
     title: z.string().trim().min(3).max(200),
@@ -193,7 +164,7 @@ export const liveEventSchema = z
     venue: optionalText(160),
     startsAt: lagosDateTime,
     endsAt: z.union([z.literal(''), lagosDateTime]).optional().transform((v) => (v ? v : null)),
-    youtube: youtubeField('Enter the YouTube Live video id or watch URL.'),
+    autoLive: checkbox,
     featured: checkbox,
   })
   .refine((d) => !d.endsAt || d.endsAt > d.startsAt, { message: 'End time must be after the start time.', path: ['endsAt'] })

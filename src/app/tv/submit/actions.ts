@@ -7,7 +7,7 @@ import { recordAudit } from '@/lib/audit'
 import { clientIp, hashIp } from '@/lib/auth'
 import { submissionReference, slugSuffix } from '@/lib/ids'
 import { RateLimiter } from '@/lib/rate-limit'
-import { claimUpload } from '@/lib/uploads'
+import { claimUpload, muxFieldsForAsset } from '@/lib/uploads'
 import { videoSlug } from '@/lib/slug'
 import { fieldErrors, formToObject, submissionSchema, type FieldErrors } from '@/lib/validation'
 import { parseYouTubeId } from '@/lib/youtube'
@@ -74,6 +74,10 @@ export async function submitStory(_prev: SubmitState, form: FormData): Promise<S
     }
   }
 
+  const media = upload
+    ? await muxFieldsForAsset(upload.muxAssetId)
+    : { provider: 'youtube' as const, providerRef: parseYouTubeId(data.mediaUrl) }
+
   const reference = submissionReference()
   const video = { id: randomUUID(), title: data.title }
   await db.transaction(async (tx) => {
@@ -85,10 +89,9 @@ export async function submitStory(_prev: SubmitState, form: FormData): Promise<S
         description: data.description,
         categoryId: category.id,
         source: 'citizen',
-        // An uploaded file is stored privately until published. A YouTube link can be previewed safely by
+        // An uploaded file is private on Mux until published. A submitted YouTube link can be previewed by
         // staff; any other link is kept for manual review only.
-        provider: upload ? 'upload' : 'youtube',
-        providerRef: upload ? upload.id : parseYouTubeId(data.mediaUrl),
+        ...media,
         submittedMediaUrl: data.mediaUrl,
         location: data.location,
         reporterName: data.name,

@@ -103,3 +103,24 @@ a.stat-card:hover { border-color: var(--fg-lo); }
   .stat-cards { grid-template-columns: repeat(2, 1fr); }
   .check-grid { grid-template-columns: 1fr; }
 }
+
+/* Mux stream panel */
+.stream-secret {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  background: var(--surface-2, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.plain-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.plain-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border, #333);
+}

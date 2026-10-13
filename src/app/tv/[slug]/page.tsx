@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { Player } from '@/components/tv/Player'
-import { mediaSource } from '@/lib/media'
+import { playbackForVideo } from '@/lib/playback-server'
 import { thumbnailFor } from '@/components/tv/Thumb'
 import { VerifiedBadge, VideoCard } from '@/components/tv/VideoCard'
 import { formatCount, formatDate, formatDuration, initials } from '@/lib/format'
@@ -68,7 +68,7 @@ export default async function VideoPage({ params }: { params: Promise<{ slug: st
       />
       <div className="wrap video-layout">
         <article>
-          <Player {...mediaSource(video.provider, video.providerRef)} title={video.title} />
+          <Player source={playbackForVideo(video, { preview: false })} title={video.title} />
           <div className="meta-row" style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {video.categoryName && (
               <Link className="badge badge-cat" href={`/tv/archive?category=${video.categorySlug}&range=all`}>

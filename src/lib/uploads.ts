@@ -1,11 +1,21 @@
 import 'server-only'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
-import { mkdir, open, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { and, eq, inArray, lt, sql } from 'drizzle-orm'
+import { and, eq, inArray, lt } from 'drizzle-orm'
 import { db, schema } from '@/db'
 import type { MediaUpload } from '@/db/schema'
-import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK_BYTES, sniffVideoType } from './media'
+import { MAX_UPLOAD_BYTES } from './media'
+import {
+  MuxError,
+  cancelDirectUpload,
+  createDirectUpload,
+  deleteAsset,
+  getAsset,
+  getDirectUpload,
+  muxReady,
+  policyId,
+} from './mux'
+import { siteUrl } from './site'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const STALE_MS = 24 * 60 * 60 * 1000
@@ -20,26 +30,8 @@ export class UploadError extends Error {
   }
 }
 
-/**
- * Where uploaded videos are stored. Must be outside the deployed app folder so a new release
- * never deletes them. Required in production; defaults to ./.media in development.
- */
-export function mediaDir(): string | null {
-  const dir = process.env.MEDIA_DIR?.trim()
-  if (dir) return path.resolve(dir)
-  return process.env.NODE_ENV === 'production' ? null : path.resolve(process.cwd(), '.media')
-}
-
 export function uploadsEnabled(): boolean {
-  return mediaDir() !== null
-}
-
-/** Absolute file path for an upload id. The id is validated, so it can never escape MEDIA_DIR. */
-export function uploadPath(id: string): string {
-  const dir = mediaDir()
-  if (!dir) throw new UploadError('Video uploads are not configured on this server.', 503)
-  if (!UUID.test(id)) throw new UploadError('Invalid upload.', 400)
-  return path.join(dir, 'videos', id)
+  return muxReady()
 }
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex')
@@ -52,122 +44,141 @@ function tokenMatches(row: Pick<MediaUpload, 'tokenHash'>, token: string | null)
 }
 
 async function findUpload(id: string, token: string | null): Promise<MediaUpload> {
-  if (!UUID.test(id)) throw new UploadError('Invalid upload.', 404)
+  if (!UUID.test(id)) throw new UploadError('Upload not found.', 404)
   const row = await db.query.mediaUploads.findFirst({ where: eq(schema.mediaUploads.id, id) })
   // Same answer for "missing" and "wrong token" so ids can't be probed.
   if (!row || !tokenMatches(row, token)) throw new UploadError('Upload not found.', 404)
   return row
 }
 
-/** Removes uploads that were never finished or never attached to a video within 24 hours. */
+function asUploadError(e: unknown): never {
+  if (e instanceof UploadError) throw e
+  if (e instanceof MuxError) throw new UploadError(e.status >= 500 || e.status === 502 ? 'The video service is not responding. Please try again in a moment.' : e.message, e.status === 502 ? 502 : 503)
+  throw e
+}
+
+/**
+ * Removes uploads that were never finished or never attached to a story within 24 hours, including the
+ * video Mux already holds for them, so abandoned uploads don't accumulate storage costs.
+ */
 export async function cleanupStaleUploads(): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_MS)
-  const stale = await db
-    .select({ id: schema.mediaUploads.id })
+  const rows = await db
+    .select()
     .from(schema.mediaUploads)
     .where(and(inArray(schema.mediaUploads.status, ['uploading', 'complete']), lt(schema.mediaUploads.createdAt, cutoff)))
-    .limit(200)
-  for (const { id } of stale) {
-    await rm(uploadPath(id), { force: true }).catch(() => undefined)
-    await db.delete(schema.mediaUploads).where(eq(schema.mediaUploads.id, id))
+    .limit(50)
+  for (const row of rows) {
+    try {
+      let assetId = row.muxAssetId
+      if (!assetId && row.muxUploadId) assetId = (await getDirectUpload(row.muxUploadId).catch(() => null))?.asset_id ?? null
+      if (assetId) await deleteAsset(assetId).catch((e) => ignoreNotFound(e))
+      else if (row.muxUploadId) await cancelDirectUpload(row.muxUploadId).catch((e) => ignoreNotFound(e))
+    } catch {
+      continue // Mux unreachable: try again on the next cleanup
+    }
+    await db.delete(schema.mediaUploads).where(eq(schema.mediaUploads.id, row.id))
   }
 }
 
+function ignoreNotFound(e: unknown) {
+  if (!(e instanceof MuxError) || (e.status !== 404 && e.status !== 400)) throw e
+}
+
+/** Starts a direct upload to Mux. The browser sends the file to the returned URL, not to this server. */
 export async function createUpload(input: {
   purpose: 'citizen' | 'staff'
   name: string
   size: number
   userId: string | null
   ipHash: string | null
-}): Promise<{ id: string; token: string; chunkSize: number }> {
-  const dir = mediaDir()
-  if (!dir) throw new UploadError('Video uploads are not configured on this server yet.', 503)
+}): Promise<{ id: string; token: string; url: string }> {
+  if (!muxReady()) throw new UploadError('Video upload is not set up on this server yet.', 503)
   if (!Number.isSafeInteger(input.size) || input.size <= 0) throw new UploadError('Empty file.', 400)
   if (input.size > MAX_UPLOAD_BYTES) throw new UploadError('This video is larger than 500MB.', 413)
 
-  await cleanupStaleUploads()
+  void cleanupStaleUploads().catch(() => undefined)
   const id = randomUUID()
   const token = randomBytes(32).toString('base64url')
-  await mkdir(path.join(dir, 'videos'), { recursive: true })
-  // Create the empty file first so every chunk can be written at its offset.
-  const fh = await open(uploadPath(id), 'wx', 0o640)
-  await fh.close()
-  await db.insert(schema.mediaUploads).values({
-    id,
-    purpose: input.purpose,
-    tokenHash: sha256(token),
-    originalName: input.name.replace(/[^\w.\- ()]/g, '_').slice(0, 200) || 'video',
-    mimeType: 'application/octet-stream',
-    sizeBytes: input.size,
-    uploadedBy: input.userId,
-    ipHash: input.ipHash,
-  })
-  return { id, token, chunkSize: UPLOAD_CHUNK_BYTES }
-}
-
-/** Writes one chunk. Chunks must arrive in order; a retried chunk at an old offset is rejected with the expected offset. */
-export async function appendChunk(id: string, token: string | null, offset: number, data: Uint8Array): Promise<number> {
-  const row = await findUpload(id, token)
-  if (row.status !== 'uploading') throw new UploadError('This upload is already finished.', 409)
-  if (offset !== row.receivedBytes) {
-    throw new UploadError('Unexpected chunk offset.', 409, { expectedOffset: row.receivedBytes })
-  }
-  if (data.byteLength === 0 || data.byteLength > UPLOAD_CHUNK_BYTES) throw new UploadError('Invalid chunk size.', 400)
-  if (offset + data.byteLength > row.sizeBytes) throw new UploadError('More data than the declared file size.', 400)
-
-  const fh = await open(uploadPath(id), 'r+')
   try {
-    await fh.write(data, 0, data.byteLength, offset)
-  } finally {
-    await fh.close()
+    const mux = await createDirectUpload({ corsOrigin: new URL(siteUrl()).origin, passthrough: id })
+    await db.insert(schema.mediaUploads).values({
+      id,
+      purpose: input.purpose,
+      tokenHash: sha256(token),
+      muxUploadId: mux.id,
+      originalName: input.name.replace(/[^\w.\- ()]/g, '_').slice(0, 200) || 'video',
+      mimeType: 'application/octet-stream',
+      sizeBytes: input.size,
+      uploadedBy: input.userId,
+      ipHash: input.ipHash,
+    })
+    return { id, token, url: mux.url }
+  } catch (e) {
+    return asUploadError(e)
   }
-  // Guarded update: if two requests raced for the same offset, only one is counted.
-  const [res] = await db
-    .update(schema.mediaUploads)
-    .set({ receivedBytes: sql`${schema.mediaUploads.receivedBytes} + ${data.byteLength}` })
-    .where(and(eq(schema.mediaUploads.id, id), eq(schema.mediaUploads.receivedBytes, offset)))
-  if (res.affectedRows === 0) throw new UploadError('Chunk was sent twice.', 409)
-  return offset + data.byteLength
-}
-
-/** Checks the size and the real file type, then marks the upload ready to attach. */
-export async function completeUpload(id: string, token: string | null): Promise<{ mimeType: string }> {
-  const row = await findUpload(id, token)
-  if (row.status !== 'uploading') return { mimeType: row.mimeType }
-  const file = uploadPath(id)
-  const info = await stat(file)
-  if (row.receivedBytes !== row.sizeBytes || info.size !== row.sizeBytes) {
-    throw new UploadError('The upload is incomplete.', 409, { expectedOffset: row.receivedBytes })
-  }
-  const fh = await open(file, 'r')
-  const head = new Uint8Array(64)
-  try {
-    await fh.read(head, 0, 64, 0)
-  } finally {
-    await fh.close()
-  }
-  const mimeType = sniffVideoType(head)
-  if (!mimeType) {
-    await rm(file, { force: true })
-    await db.delete(schema.mediaUploads).where(eq(schema.mediaUploads.id, id))
-    throw new UploadError('This file is not a supported video (MP4, MOV or WebM).', 415)
-  }
-  await db
-    .update(schema.mediaUploads)
-    .set({ status: 'complete', mimeType, completedAt: new Date() })
-    .where(eq(schema.mediaUploads.id, id))
-  return { mimeType }
 }
 
 /**
- * Validates an upload referenced by a form and marks it attached. Returns null if the upload is
- * missing, unfinished, already used, belongs to another purpose, or the token is wrong.
+ * Called by the browser once Mux has received the whole file. Mux creates the video asset a moment
+ * later, so `ready` is false until it exists and the browser asks again.
+ */
+export async function completeUpload(id: string, token: string | null): Promise<{ ready: boolean }> {
+  const row = await findUpload(id, token)
+  if (row.status !== 'uploading') return { ready: true }
+  if (!row.muxUploadId) throw new UploadError('Upload not found.', 404)
+  try {
+    const upload = await getDirectUpload(row.muxUploadId)
+    if (upload.status === 'errored' || upload.status === 'cancelled' || upload.status === 'timed_out') {
+      throw new UploadError('The upload failed on the video service. Please upload the file again.', 422)
+    }
+    if (upload.status !== 'asset_created' || !upload.asset_id) return { ready: false }
+    await db
+      .update(schema.mediaUploads)
+      .set({ status: 'complete', muxAssetId: upload.asset_id, completedAt: new Date() })
+      .where(eq(schema.mediaUploads.id, id))
+    return { ready: true }
+  } catch (e) {
+    return asUploadError(e)
+  }
+}
+
+/** The media fields to store on a video row for a freshly attached upload. */
+export type MuxMediaFields = {
+  provider: 'mux'
+  providerRef: null
+  muxAssetId: string
+  muxPrivatePlaybackId: string | null
+  mediaStatus: 'ready' | 'processing' | 'errored'
+  durationSeconds: number | null
+}
+
+export async function muxFieldsForAsset(assetId: string): Promise<MuxMediaFields> {
+  try {
+    const asset = await getAsset(assetId)
+    return {
+      provider: 'mux',
+      providerRef: null,
+      muxAssetId: assetId,
+      muxPrivatePlaybackId: policyId(asset.playback_ids, 'signed'),
+      mediaStatus: asset.status === 'ready' ? 'ready' : asset.status === 'errored' ? 'errored' : 'processing',
+      durationSeconds: asset.duration ? Math.round(asset.duration) : null,
+    }
+  } catch {
+    // Mux hiccup: the webhook (or a later refresh) fills in the rest.
+    return { provider: 'mux', providerRef: null, muxAssetId: assetId, muxPrivatePlaybackId: null, mediaStatus: 'processing', durationSeconds: null }
+  }
+}
+
+/**
+ * Validates an upload referenced by a form and marks it attached. Returns null if the upload is missing,
+ * unfinished, already used, belongs to another purpose, or the token is wrong.
  */
 export async function claimUpload(
   id: string | null | undefined,
   token: string | null | undefined,
   purpose: 'citizen' | 'staff',
-): Promise<MediaUpload | null> {
+): Promise<(MediaUpload & { muxAssetId: string }) | null> {
   if (!id || !token) return null
   let row: MediaUpload
   try {
@@ -175,15 +186,26 @@ export async function claimUpload(
   } catch {
     return null
   }
-  if (row.status !== 'complete' || row.purpose !== purpose) return null
+  if (row.status !== 'complete' || row.purpose !== purpose || !row.muxAssetId) return null
   const [res] = await db
     .update(schema.mediaUploads)
     .set({ status: 'attached' })
     .where(and(eq(schema.mediaUploads.id, id), eq(schema.mediaUploads.status, 'complete')))
-  return res.affectedRows === 1 ? row : null
+  return res.affectedRows === 1 ? (row as MediaUpload & { muxAssetId: string }) : null
 }
 
-export async function getUploadMeta(id: string) {
+/* ------------------------------------------------------------------ */
+/* Legacy: files uploaded to the server before Mux. Read-only; remove once none are left.        */
+/* ------------------------------------------------------------------ */
+
+export function legacyUploadPath(id: string): string | null {
+  const dir = process.env.MEDIA_DIR?.trim()
+  if (!dir || !UUID.test(id)) return null
+  return path.join(path.resolve(dir), 'videos', id)
+}
+
+export async function getLegacyUploadMeta(id: string) {
   if (!UUID.test(id)) return null
-  return (await db.query.mediaUploads.findFirst({ where: eq(schema.mediaUploads.id, id) })) ?? null
+  const row = await db.query.mediaUploads.findFirst({ where: eq(schema.mediaUploads.id, id) })
+  return row && !row.muxUploadId ? row : null
 }

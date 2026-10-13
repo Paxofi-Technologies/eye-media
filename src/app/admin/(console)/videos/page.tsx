@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { z } from 'zod'
 import { STATUS_OPTIONS, StatusPill } from '@/components/admin/StatusPill'
 import { Pagination } from '@/components/Pagination'
-import { thumbnailFor } from '@/components/tv/Thumb'
+import { staffThumbnail } from '@/lib/playback-server'
 import type { VideoStatus } from '@/db/schema'
 import { REGISTRY_PAGE_SIZE, getLiveCount, getVideoStats, listVideos } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
@@ -114,7 +114,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
             </thead>
             <tbody>
               {rows.map((r) => {
-                const thumb = thumbnailFor(r)
+                const thumb = staffThumbnail(r)
                 return (
                   <tr key={r.id}>
                     <td>

@@ -16,11 +16,13 @@ function contentSecurityPolicy(nonce: string) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
     // Inline style attributes cannot carry a nonce; style injection is low-risk compared to script.
     `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' data: blob: https://i.ytimg.com`,
+    `img-src 'self' data: blob: https://i.ytimg.com https://image.mux.com`,
     `font-src 'self'`,
-    `connect-src 'self'${dev ? ' ws:' : ''}`,
+    // Mux: video segments (stream.mux.com), direct upload target (Google Cloud Storage), player analytics (litix, off by default).
+    `connect-src 'self'${dev ? ' ws:' : ''} https://*.mux.com https://storage.googleapis.com https://*.litix.io${process.env.MUX_API_BASE ? ` ${new URL(process.env.MUX_API_BASE).origin}` : ''}`,
     `frame-src https://www.youtube-nocookie.com`,
-    `media-src 'self' blob:`,
+    `media-src 'self' blob: https://*.mux.com`,
+    `worker-src 'self' blob:`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,

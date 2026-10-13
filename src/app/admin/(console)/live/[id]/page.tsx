@@ -4,9 +4,11 @@ import { notFound } from 'next/navigation'
 import { z } from 'zod'
 import { LiveEventActions } from '@/components/admin/LiveEventActions'
 import { LiveEventForm } from '@/components/admin/LiveForms'
+import { StreamPanel } from '@/components/admin/StreamPanel'
 import { Restricted } from '@/components/admin/Restricted'
 import { Player } from '@/components/tv/Player'
 import { getLiveEventForStaff } from '@/lib/admin'
+import { playbackForEvent } from '@/lib/playback-server'
 import { requireStaff } from '@/lib/auth'
 import { formatDateTime } from '@/lib/format'
 import { can } from '@/lib/rbac'
@@ -46,14 +48,14 @@ export default async function LiveEventAdminPage({
           ← All events
         </Link>
       </div>
-      {sp.created && <div className="alert alert-success" role="status">Event scheduled. Attach the YouTube Live video, then press Go live when the broadcast starts.</div>}
+      {sp.created && <div className="alert alert-success" role="status">Event scheduled. Point your encoder at the stream settings below, then press Go live when the broadcast starts.</div>}
       {sp.error && <div className="alert alert-error" role="alert">{sp.error.slice(0, 200)}</div>}
       <div className="two-col">
         <LiveEventForm initial={event} categories={categories} cities={cities} />
         <div>
           <div className="form-panel">
             <h2>Broadcast</h2>
-            <Player youtubeId={event.providerRef} title={event.title} live={event.status === 'live'} />
+            <Player source={playbackForEvent(event, { preview: true })} title={event.title} live={event.status === 'live'} />
             <div style={{ marginTop: 14 }}>
               <LiveEventActions event={event} canMakeReplay={can(user.role, 'video.edit')} back="detail" />
             </div>
@@ -64,6 +66,7 @@ export default async function LiveEventAdminPage({
               </Link>
             </p>
           </div>
+          <StreamPanel event={event} />
         </div>
       </div>
     </>

@@ -6,6 +6,7 @@ import { ACCEPTED_VIDEO_LABEL, MAX_UPLOAD_BYTES, formatBytes } from '@/lib/media
 type State =
   | { phase: 'idle' }
   | { phase: 'uploading'; name: string; size: number; sent: number }
+  | { phase: 'finishing'; name: string; size: number }
   | { phase: 'done'; name: string; size: number; id: string; token: string }
   | { phase: 'error'; message: string }
 
@@ -16,8 +17,7 @@ async function json(res: Response) {
 }
 
 /**
- * Design-system "Media Drop Zone & Upload Queue". Uploads in chunks (works behind Cloudflare's 100MB
- * request limit and survives flaky mobile data by retrying single chunks), then exposes the result to
+ * Design-system "Media Drop Zone & Upload Queue". Sends the file straight to Mux in resumable chunks (survives flaky mobile data), then exposes the result to
  * the surrounding form as hidden `uploadId` / `uploadToken` inputs.
  */
 export function VideoUpload({
@@ -40,6 +40,8 @@ export function VideoUpload({
     const controller = new AbortController()
     abort.current = controller
     setState({ phase: 'uploading', name: file.name, size: file.size, sent: 0 })
+    let uploader: { abort: () => void } | null = null
+    controller.signal.addEventListener('abort', () => uploader?.abort())
     try {
       const start = await fetch('/api/uploads', {
         method: 'POST',
@@ -49,43 +51,34 @@ export function VideoUpload({
       })
       const created = await json(start)
       if (!start.ok) throw new Error(String(created.error ?? 'Could not start the upload.'))
-      const { id, token, chunkSize } = created as { id: string; token: string; chunkSize: number }
+      const { id, token, url } = created as { id: string; token: string; url: string }
 
-      let offset = 0
-      let failures = 0
-      while (offset < file.size) {
-        const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size))
-        try {
-          const res = await fetch(`/api/uploads/${id}?offset=${offset}`, {
-            method: 'PUT',
-            headers: { 'x-upload-token': token, 'Content-Type': 'application/octet-stream' },
-            body: chunk,
-            signal: controller.signal,
-          })
-          const body = await json(res)
-          if (res.status === 409 && typeof body.expectedOffset === 'number') {
-            offset = body.expectedOffset // server already has more (or less): resume from there
-            continue
-          }
-          if (!res.ok) throw new Error(String(body.error ?? `Upload failed (${res.status}).`))
-          offset = Number(body.received)
-          failures = 0
-          setState({ phase: 'uploading', name: file.name, size: file.size, sent: offset })
-        } catch (e) {
-          if (controller.signal.aborted) throw e
-          if (++failures > 4) throw e
-          await wait(1000 * 2 ** failures) // 2s, 4s, 8s, 16s: ride out a dropped mobile connection
-        }
-      }
-
-      const done = await fetch(`/api/uploads/${id}/complete`, {
-        method: 'POST',
-        headers: { 'x-upload-token': token },
-        signal: controller.signal,
+      // The file goes straight from the browser to Mux in resumable chunks; it never passes through our server.
+      const { UpChunk } = await import('@mux/upchunk')
+      await new Promise<void>((resolve, reject) => {
+        const up = UpChunk.createUpload({ endpoint: url, file, chunkSize: 8 * 1024, attempts: 5, delayBeforeAttempt: 2 })
+        uploader = up
+        up.on('progress', (e: CustomEvent<number>) =>
+          setState({ phase: 'uploading', name: file.name, size: file.size, sent: Math.round((e.detail / 100) * file.size) }),
+        )
+        up.on('error', (e: CustomEvent<{ message?: string }>) => reject(new Error(e.detail?.message || 'Upload failed. Check your connection and try again.')))
+        up.on('success', () => resolve())
       })
-      const doneBody = await json(done)
-      if (!done.ok) throw new Error(String(doneBody.error ?? 'Could not finish the upload.'))
-      setState({ phase: 'done', name: file.name, size: file.size, id, token })
+
+      // Mux creates the video a moment after the last byte; ask until it exists.
+      setState({ phase: 'finishing', name: file.name, size: file.size })
+      for (let i = 0; i < 60; i++) {
+        const done = await fetch(`/api/uploads/${id}/complete`, {
+          method: 'POST',
+          headers: { 'x-upload-token': token },
+          signal: controller.signal,
+        })
+        const body = await json(done)
+        if (!done.ok) throw new Error(String(body.error ?? 'Could not finish the upload.'))
+        if (body.ready) return setState({ phase: 'done', name: file.name, size: file.size, id, token })
+        await wait(2000)
+      }
+      throw new Error('The video service is taking longer than expected. Please try again.')
     } catch (e) {
       if (controller.signal.aborted) return setState({ phase: 'idle' })
       setState({ phase: 'error', message: e instanceof Error ? e.message : 'Upload failed.' })
@@ -110,7 +103,7 @@ export function VideoUpload({
           e.preventDefault()
           setDragging(false)
           const file = e.dataTransfer.files[0]
-          if (file && state.phase !== 'uploading') void upload(file)
+          if (file && state.phase !== 'uploading' && state.phase !== 'finishing') void upload(file)
         }}
       >
         <svg className="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -126,7 +119,7 @@ export function VideoUpload({
           type="file"
           accept="video/mp4,video/quicktime,video/webm,video/3gpp,video/*"
           aria-describedby={`${inputId}-hint`}
-          disabled={state.phase === 'uploading'}
+          disabled={state.phase === 'uploading' || state.phase === 'finishing'}
           onChange={(e) => {
             const file = e.target.files?.[0]
             if (file) void upload(file)
@@ -155,6 +148,11 @@ export function VideoUpload({
               </button>
             </div>
           </div>
+        )}
+        {state.phase === 'finishing' && (
+          <p className="field-hint" role="status">
+            Finishing {state.name}…
+          </p>
         )}
         {state.phase === 'done' && (
           <div className="upload-progress" role="status">

@@ -13,6 +13,9 @@ const cardColumns = {
   summary: videos.summary,
   provider: videos.provider,
   providerRef: videos.providerRef,
+  // Public playback id only: the private id must never be selected by a public query.
+  muxPublicPlaybackId: videos.muxPublicPlaybackId,
+  mediaStatus: videos.mediaStatus,
   thumbnailUrl: videos.thumbnailUrl,
   durationSeconds: videos.durationSeconds,
   reporterName: videos.reporterName,
@@ -27,8 +30,10 @@ export type VideoCard = {
   slug: string
   title: string
   summary: string | null
-  provider: 'youtube' | 'upload'
+  provider: 'youtube' | 'upload' | 'mux'
   providerRef: string | null
+  muxPublicPlaybackId: string | null
+  mediaStatus: 'ready' | 'processing' | 'errored'
   thumbnailUrl: string | null
   durationSeconds: number | null
   reporterName: string | null
@@ -182,7 +187,10 @@ const eventColumns = {
   description: ev.description,
   city: ev.city,
   venue: ev.venue,
+  provider: ev.provider,
   providerRef: ev.providerRef,
+  // Public playback id only; it exists only while the event is on air.
+  muxPublicPlaybackId: ev.muxPublicPlaybackId,
   status: ev.status,
   featured: ev.featured,
   startsAt: ev.startsAt,
@@ -206,7 +214,7 @@ function eventQuery() {
 /** Every event currently on air; featured first. */
 export async function getLiveEvents() {
   return eventQuery()
-    .where(and(eq(ev.status, 'live'), isNotNull(ev.providerRef)))
+    .where(and(eq(ev.status, 'live'), or(isNotNull(ev.muxPublicPlaybackId), isNotNull(ev.providerRef))))
     .orderBy(desc(ev.featured), asc(ev.startedAt))
 }
 

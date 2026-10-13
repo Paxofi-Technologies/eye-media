@@ -8,8 +8,18 @@ import { z } from 'zod'
 import { db, schema } from '@/db'
 import { recordAudit } from '@/lib/audit'
 import { AuthzError, authorize, destroySession, getCurrentUser, hashPassword } from '@/lib/auth'
+import { publishBlocker } from '@/lib/publish'
 import { slugSuffix } from '@/lib/ids'
-import { claimUpload } from '@/lib/uploads'
+import { claimUpload, muxFieldsForAsset } from '@/lib/uploads'
+import {
+  createStreamForEvent,
+  deleteAssetQuietly,
+  deleteStreamQuietly,
+  ensurePublicAssetId,
+  removePublicAssetId,
+  transitionEvent,
+} from '@/lib/mux-ops'
+import { addSimulcastTarget, getLiveStream, removeSimulcastTarget, resetStreamKey } from '@/lib/mux'
 import { RESERVED_SLUGS, videoSlug } from '@/lib/slug'
 import {
   MODERATION_CHECKLIST,
@@ -34,11 +44,7 @@ function revalidatePublic() {
 }
 
 /** Checks that must pass before anything goes live on the public site. */
-function publishBlocker(v: { providerRef: string | null; categoryId: string | null }): string | null {
-  if (!v.providerRef) return 'Attach the Eye TV YouTube video before publishing.'
-  if (!v.categoryId) return 'Choose a category before publishing.'
-  return null
-}
+const mediaErrorText = (e: unknown) => (e instanceof Error ? e.message : 'Unknown error.')
 
 /* ------------------------------------------------------------------ */
 /* Session                                                             */
@@ -87,6 +93,16 @@ export async function moderate(_prev: ActionState, form: FormData): Promise<Acti
     const blocker = publishBlocker(video)
     if (blocker) return { ok: false, message: blocker }
   }
+  // Approving makes the video public on Mux (adds a public playback id) before it is marked published here.
+  let publicId: string | null = video.muxPublicPlaybackId
+  const addedPublicId = decision === 'approved' && video.provider === 'mux' && !video.muxPublicPlaybackId
+  if (decision === 'approved' && video.provider === 'mux') {
+    try {
+      publicId = await ensurePublicAssetId(video.muxAssetId!)
+    } catch (e) {
+      return { ok: false, message: `Could not publish the video on Mux. ${mediaErrorText(e)}` }
+    }
+  }
   if (decision !== 'approved' && !notes) {
     return { ok: false, message: 'Add a note explaining why, for the rest of the desk.', errors: { notes: 'Required' } }
   }
@@ -101,6 +117,7 @@ export async function moderate(_prev: ActionState, form: FormData): Promise<Acti
         status: nextStatus,
         verified: decision === 'approved' ? true : video.verified,
         publishedAt: decision === 'approved' ? (video.publishedAt ?? now) : video.publishedAt,
+        muxPublicPlaybackId: decision === 'approved' ? publicId : video.muxPublicPlaybackId,
         updatedAt: now,
       })
       .where(and(eq(schema.videos.id, videoId), eq(schema.videos.status, video.status)))
@@ -108,7 +125,11 @@ export async function moderate(_prev: ActionState, form: FormData): Promise<Acti
     await tx.insert(schema.moderationReviews).values({ videoId, reviewerId: user.id, decision, notes, checklist })
     return true
   })
-  if (!applied) return { ok: false, message: 'Another editor changed this item while you were reviewing it.' }
+  if (!applied) {
+    // Don't leave a public link behind for something that was not published.
+    if (addedPublicId && publicId) await removePublicAssetId(video.muxAssetId!, publicId).catch(() => undefined)
+    return { ok: false, message: 'Another editor changed this item while you were reviewing it.' }
+  }
 
   await recordAudit(user, `moderation.${decision}`, { type: 'video', id: video.id, label: video.title }, notes)
   revalidatePath('/admin', 'layout')
@@ -182,27 +203,27 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
   const existing = id ? (await db.select().from(schema.videos).where(eq(schema.videos.id, id)).limit(1))[0] : undefined
   if (id && !existing) return { ok: false, message: 'This video no longer exists.' }
 
-  // Video source: a newly uploaded file wins, then a YouTube link, then the file already attached.
+  // Video source: a newly uploaded file replaces whatever is attached; otherwise nothing about the media changes.
   const uploadId = form.get('uploadId')
-  let media: { provider: 'youtube' | 'upload'; providerRef: string | null }
+  let media: Partial<Awaited<ReturnType<typeof muxFieldsForAsset>>> = {}
+  let replacedAssetId: string | null = null
   if (typeof uploadId === 'string' && uploadId) {
+    if (existing?.status === 'published') {
+      return { ok: false, message: 'Unpublish this video before replacing it.', errors: { upload: 'Unpublish the story first.' } }
+    }
     const upload = await claimUpload(uploadId, String(form.get('uploadToken') ?? ''), 'staff')
     if (!upload) {
       return { ok: false, message: 'The video upload did not finish. Please upload it again.', errors: { upload: 'Upload the file again, then save.' } }
     }
-    media = { provider: 'upload', providerRef: upload.id }
-  } else if (d.youtube) {
-    media = { provider: 'youtube', providerRef: d.youtube }
-  } else if (existing?.provider === 'upload') {
-    media = { provider: 'upload', providerRef: existing.providerRef }
-  } else {
-    media = { provider: 'youtube', providerRef: null }
+    media = { ...(await muxFieldsForAsset(upload.muxAssetId)) }
+    if (media.durationSeconds == null) delete media.durationSeconds
+    replacedAssetId = existing?.provider === 'mux' ? existing.muxAssetId : null
   }
   const row = { ...values, ...media }
 
   if (id && existing) {
     if (existing.status === 'published') {
-      const blocker = publishBlocker({ providerRef: row.providerRef, categoryId: row.categoryId })
+      const blocker = publishBlocker({ ...existing, categoryId: row.categoryId })
       if (blocker) return { ok: false, message: `This video is live on Eye TV. ${blocker}` }
     }
     // Only one featured hero at a time.
@@ -210,10 +231,12 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
       if (values.featured) await tx.update(schema.videos).set({ featured: false }).where(ne(schema.videos.id, id))
       await tx.update(schema.videos).set(row).where(eq(schema.videos.id, id))
     })
-    await recordAudit(user, 'video.updated', { type: 'video', id, label: values.title })
+    // The video that was replaced is no longer needed; deleting it stops its storage cost.
+    await deleteAssetQuietly(replacedAssetId)
+    await recordAudit(user, 'video.updated', { type: 'video', id, label: values.title }, media.muxAssetId ? 'Replaced the video' : null)
     revalidatePath('/admin', 'layout')
     if (existing.status === 'published') revalidatePublic()
-    return { ok: true, message: 'Changes saved.' }
+    return { ok: true, message: media.muxAssetId ? 'Saved. The new video is processing and will be ready in a few minutes.' : 'Changes saved.' }
   }
 
   const created = { id: randomUUID() }
@@ -248,6 +271,20 @@ export async function changeVideoStatus(form: FormData): Promise<void> {
     if (blocker) redirect(`/admin/videos/${id}?error=${encodeURIComponent(blocker)}`)
   }
 
+  // Keep Mux in step: published videos have a public playback id, everything else is private.
+  let publicId = video.muxPublicPlaybackId
+  try {
+    if (video.provider === 'mux' && video.muxAssetId) {
+      if (status === 'published') publicId = await ensurePublicAssetId(video.muxAssetId)
+      else if (video.muxPublicPlaybackId) {
+        await removePublicAssetId(video.muxAssetId, video.muxPublicPlaybackId)
+        publicId = null
+      }
+    }
+  } catch (e) {
+    redirect(`/admin/videos/${id}?error=${encodeURIComponent(`Mux could not update access to this video. ${mediaErrorText(e)}`)}`)
+  }
+
   const now = new Date()
   await db
     .update(schema.videos)
@@ -255,6 +292,7 @@ export async function changeVideoStatus(form: FormData): Promise<void> {
       status,
       publishedAt: status === 'published' ? (video.publishedAt ?? now) : video.publishedAt,
       featured: status === 'published' ? video.featured : false,
+      muxPublicPlaybackId: publicId,
       updatedAt: now,
     })
     .where(eq(schema.videos.id, id))
@@ -295,7 +333,7 @@ export async function saveLiveEvent(_prev: ActionState, form: FormData): Promise
     venue: d.venue,
     startsAt: d.startsAt,
     endsAt: d.endsAt,
-    providerRef: d.youtube,
+    autoLive: d.autoLive,
     featured: d.featured,
     updatedAt: new Date(),
   }
@@ -303,9 +341,6 @@ export async function saveLiveEvent(_prev: ActionState, form: FormData): Promise
   if (id) {
     const existing = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
     if (!existing) return { ok: false, message: 'This event no longer exists.' }
-    if (existing.status === 'live' && !values.providerRef) {
-      return { ok: false, message: 'This event is live. Keep its YouTube video attached.', errors: { youtube: 'Required while live' } }
-    }
     await db.transaction(async (tx) => {
       if (values.featured) await tx.update(schema.liveEvents).set({ featured: false }).where(ne(schema.liveEvents.id, id))
       await tx.update(schema.liveEvents).set(values).where(eq(schema.liveEvents.id, id))
@@ -319,12 +354,28 @@ export async function saveLiveEvent(_prev: ActionState, form: FormData): Promise
   const newId = randomUUID()
   await db.transaction(async (tx) => {
     if (values.featured) await tx.update(schema.liveEvents).set({ featured: false })
-    await tx.insert(schema.liveEvents).values({ ...values, id: newId, status: 'scheduled', createdBy: user.id })
+    await tx.insert(schema.liveEvents).values({ ...values, id: newId, provider: 'mux', status: 'scheduled', createdBy: user.id })
   })
   await recordAudit(user, 'live.event_created', { type: 'live_event', id: newId, label: values.title })
+  // The stream is created right away so the encoder details are ready; if Mux is unreachable the editor can retry.
+  const stream = await createStreamForEvent(newId)
+  if (stream.ok) await recordAudit(user, 'live.stream_created', { type: 'live_event', id: newId, label: values.title })
   revalidatePath('/admin', 'layout')
   revalidatePublic()
-  redirect(`/admin/live/${newId}?created=1`)
+  redirect(`/admin/live/${newId}?created=1${stream.ok ? '' : `&error=${encodeURIComponent(stream.message)}`}`)
+}
+
+/** Retry button when the stream could not be created with the event (e.g. Mux was not connected yet). */
+export async function createLiveStreamAction(form: FormData): Promise<void> {
+  const user = await authorize('live.manage')
+  const id = z.uuid().parse(form.get('id'))
+  const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+  if (!event) redirect('/admin/live')
+  const res = await createStreamForEvent(id)
+  if (!res.ok) redirect(`/admin/live/${id}?error=${encodeURIComponent(res.message)}`)
+  await recordAudit(user, 'live.stream_created', { type: 'live_event', id, label: event.title })
+  revalidatePath('/admin', 'layout')
+  redirect(`/admin/live/${id}`)
 }
 
 export async function setLiveEventStatus(form: FormData): Promise<void> {
@@ -336,27 +387,18 @@ export async function setLiveEventStatus(form: FormData): Promise<void> {
 
   const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
   if (!event) redirect('/admin/live')
-  if (status === 'live' && !event.providerRef) {
-    redirect(`${back}?error=${encodeURIComponent('Attach the YouTube Live video before going live.')}`)
+
+  const res = await transitionEvent(id, status, 'staff')
+  if (!res.ok) redirect(`${back}?error=${encodeURIComponent(res.message)}`)
+
+  if (res.changed) {
+    const action =
+      status === 'live' ? 'live.started' : status === 'ended' ? 'live.ended' : status === 'cancelled' ? 'live.cancelled' : 'live.event_updated'
+    await recordAudit(user, action, { type: 'live_event', id, label: event.title }, `${event.status} → ${status}`)
   }
-
-  const now = new Date()
-  await db
-    .update(schema.liveEvents)
-    .set({
-      status,
-      startedAt: status === 'live' ? (event.startedAt ?? now) : event.startedAt,
-      endedAt: status === 'ended' ? now : status === 'live' ? null : event.endedAt,
-      updatedAt: now,
-    })
-    .where(eq(schema.liveEvents.id, id))
-
-  const action =
-    status === 'live' ? 'live.started' : status === 'ended' ? 'live.ended' : status === 'cancelled' ? 'live.cancelled' : 'live.event_updated'
-  await recordAudit(user, action, { type: 'live_event', id, label: event.title }, `${event.status} → ${status}`)
   revalidatePath('/admin', 'layout')
   revalidatePublic()
-  redirect(back)
+  redirect(res.warning ? `${back}?error=${encodeURIComponent(res.warning)}` : back)
 }
 
 export async function deleteLiveEvent(form: FormData): Promise<void> {
@@ -368,11 +410,117 @@ export async function deleteLiveEvent(form: FormData): Promise<void> {
   if (event.status === 'live' || event.startedAt) {
     redirect(`/admin/live/${id}?error=${encodeURIComponent('Events that have been on air cannot be deleted.')}`)
   }
+  await deleteStreamQuietly(event)
   await db.delete(schema.liveEvents).where(eq(schema.liveEvents.id, id))
   await recordAudit(user, 'live.event_deleted', { type: 'live_event', id, label: event.title })
   revalidatePath('/admin', 'layout')
   revalidatePublic()
   redirect('/admin/live')
+}
+
+/* ---- Stream key & simulcast (the key is a secret: it is never stored by us and never put in a page) ---- */
+
+export type KeyState = { ok: boolean; message: string | null; streamKey?: string }
+
+async function streamOf(form: FormData) {
+  const id = z.uuid().parse(form.get('id'))
+  const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
+  if (!event?.muxLiveStreamId) return null
+  return { id, event, streamId: event.muxLiveStreamId }
+}
+
+/** Shows the stream key to an authorised editor for this one request, and records that it was viewed. */
+export async function revealStreamKey(_prev: KeyState, form: FormData): Promise<KeyState> {
+  let user
+  try {
+    user = await authorize('live.manage')
+  } catch (e) {
+    if (e instanceof AuthzError) return { ok: false, message: 'You do not have permission to do that.' }
+    throw e
+  }
+  const s = await streamOf(form)
+  if (!s) return { ok: false, message: 'This event has no Mux stream yet.' }
+  try {
+    const stream = await getLiveStream(s.streamId)
+    await recordAudit(user, 'live.key_viewed', { type: 'live_event', id: s.id, label: s.event.title })
+    return { ok: true, message: null, streamKey: stream.stream_key }
+  } catch (e) {
+    return { ok: false, message: mediaErrorText(e) }
+  }
+}
+
+export async function resetStreamKeyAction(_prev: KeyState, form: FormData): Promise<KeyState> {
+  let user
+  try {
+    user = await authorize('live.manage')
+  } catch (e) {
+    if (e instanceof AuthzError) return { ok: false, message: 'You do not have permission to do that.' }
+    throw e
+  }
+  const s = await streamOf(form)
+  if (!s) return { ok: false, message: 'This event has no Mux stream yet.' }
+  if (s.event.status === 'live') return { ok: false, message: 'End the broadcast before resetting the key.' }
+  try {
+    const stream = await resetStreamKey(s.streamId)
+    await recordAudit(user, 'live.key_reset', { type: 'live_event', id: s.id, label: s.event.title })
+    return { ok: true, message: 'The old key no longer works. Use the new one in your encoder.', streamKey: stream.stream_key }
+  } catch (e) {
+    return { ok: false, message: mediaErrorText(e) }
+  }
+}
+
+const simulcastSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(['youtube', 'facebook', 'custom']),
+  url: z.string().trim().max(300).optional(),
+  key: z.string().trim().min(4, 'Enter the stream key.').max(300),
+})
+
+const SIMULCAST_URLS = {
+  youtube: 'rtmps://a.rtmps.youtube.com/live2',
+  facebook: 'rtmps://live-api-s.facebook.com:443/rtmp/',
+} as const
+
+export async function addSimulcast(_prev: ActionState, form: FormData): Promise<ActionState> {
+  let user
+  try {
+    user = await authorize('live.manage')
+  } catch (e) {
+    if (e instanceof AuthzError) return denied()
+    throw e
+  }
+  const parsed = simulcastSchema.safeParse(formToObject(form))
+  if (!parsed.success) return { ok: false, message: 'Check the stream key.', errors: fieldErrors(parsed.error) }
+  const { kind, key } = parsed.data
+  const url = kind === 'custom' ? parsed.data.url : SIMULCAST_URLS[kind]
+  if (!url || !/^rtmps?:\/\/[^\s]+$/i.test(url)) {
+    return { ok: false, message: 'Enter a valid RTMP address (starting with rtmp:// or rtmps://).', errors: { url: 'Invalid address' } }
+  }
+  const s = await streamOf(form)
+  if (!s) return { ok: false, message: 'This event has no Mux stream yet.' }
+  try {
+    await addSimulcastTarget(s.streamId, { url, streamKey: key, passthrough: kind })
+  } catch (e) {
+    return { ok: false, message: mediaErrorText(e) }
+  }
+  await recordAudit(user, 'live.simulcast_added', { type: 'live_event', id: s.id, label: s.event.title }, kind)
+  revalidatePath(`/admin/live/${s.id}`)
+  return { ok: true, message: 'Destination added. It starts receiving the next time the stream goes live.' }
+}
+
+export async function removeSimulcast(form: FormData): Promise<void> {
+  const user = await authorize('live.manage')
+  const s = await streamOf(form)
+  const targetId = z.string().min(1).max(100).parse(form.get('targetId'))
+  if (!s) redirect('/admin/live')
+  try {
+    await removeSimulcastTarget(s.streamId, targetId)
+  } catch (e) {
+    redirect(`/admin/live/${s.id}?error=${encodeURIComponent(mediaErrorText(e))}`)
+  }
+  await recordAudit(user, 'live.simulcast_removed', { type: 'live_event', id: s.id, label: s.event.title })
+  revalidatePath(`/admin/live/${s.id}`)
+  redirect(`/admin/live/${s.id}`)
 }
 
 /** Turns an ended broadcast into a draft archive video (published through the normal workflow). */
@@ -383,8 +531,8 @@ export async function createReplayFromEvent(form: FormData): Promise<void> {
   const event = await db.query.liveEvents.findFirst({ where: eq(schema.liveEvents.id, id) })
   if (!event) redirect('/admin/live')
   if (event.replayVideoId) redirect(`/admin/videos/${event.replayVideoId}`)
-  if (event.status !== 'ended' || !event.providerRef) {
-    redirect(`/admin/live/${id}?error=${encodeURIComponent('Only ended events with a YouTube video can become a replay.')}`)
+  if (event.status !== 'ended' || !(event.recordingAssetId || event.providerRef)) {
+    redirect(`/admin/live/${id}?error=${encodeURIComponent('The recording is not available yet. Mux finishes it a few minutes after the stream ends.')}`)
   }
 
   const videoId = randomUUID()
@@ -392,6 +540,9 @@ export async function createReplayFromEvent(form: FormData): Promise<void> {
   if (!slug) redirect(`/admin/live/${id}?error=${encodeURIComponent('Could not generate a slug for the replay.')}`)
   const duration =
     event.startedAt && event.endedAt ? Math.round((event.endedAt.getTime() - event.startedAt.getTime()) / 1000) : null
+  const media = event.recordingAssetId
+    ? await muxFieldsForAsset(event.recordingAssetId)
+    : { provider: 'youtube' as const, providerRef: event.providerRef, durationSeconds: duration }
   await db.transaction(async (tx) => {
     await tx.insert(schema.videos).values({
       id: videoId,
@@ -400,8 +551,8 @@ export async function createReplayFromEvent(form: FormData): Promise<void> {
       summary: event.description?.slice(0, 400) ?? null,
       description: event.description,
       categoryId: event.categoryId,
-      providerRef: event.providerRef,
-      durationSeconds: duration,
+      ...media,
+      durationSeconds: media.durationSeconds ?? duration,
       location: [event.venue, event.city].filter(Boolean).join(', ') || null,
       tags: ['live', 'replay'],
       reporterName: 'Eye TV Live',

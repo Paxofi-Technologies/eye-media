@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Player } from '@/components/tv/Player'
-import { mediaSource } from '@/lib/media'
+import { playbackForVideo } from '@/lib/playback-server'
+import { playbackForEvent } from '@/lib/playback-server'
 import { SchedulePanel } from '@/components/tv/Schedule'
 import { VerifiedBadge, VideoCard } from '@/components/tv/VideoCard'
 import { requestTime } from '@/lib/schedule'
@@ -28,7 +29,7 @@ export default async function TvHome() {
           <div>
             {live ? (
               <>
-                <Player youtubeId={live.providerRef} title={live.title} live />
+                <Player source={playbackForEvent(live, { preview: false })} title={live.title} live />
                 <div className="hero-copy">
                   <div className="meta-row">
                     {live.categoryName && <span className="badge badge-cat">{live.categoryName}</span>}
@@ -50,7 +51,7 @@ export default async function TvHome() {
               </>
             ) : lead ? (
               <>
-                <Player {...mediaSource(lead.provider, lead.providerRef)} title={lead.title} />
+                <Player source={playbackForVideo(lead, { preview: false })} title={lead.title} />
                 <div className="hero-copy">
                   <div className="meta-row">
                     {lead.categoryName && <span className="badge badge-cat">{lead.categoryName}</span>}

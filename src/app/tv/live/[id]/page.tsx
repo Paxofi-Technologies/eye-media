@@ -7,6 +7,7 @@ import { LiveEventCard } from '@/components/tv/LiveEventCard'
 import { Player } from '@/components/tv/Player'
 import { SchedulePanel } from '@/components/tv/Schedule'
 import { formatClock, formatDate } from '@/lib/format'
+import { playbackForEvent } from '@/lib/playback-server'
 import { PHASE_LABELS, eventPhase, requestTime } from '@/lib/schedule'
 import { getLiveEvent, getLiveEvents, getUpcomingEvents } from '@/lib/tv'
 
@@ -30,6 +31,7 @@ export default async function LiveEventPage({ params }: { params: Promise<{ id: 
 
   const now = requestTime()
   const phase = eventPhase(event, now)
+  const playback = playbackForEvent(event, { preview: false })
   const [liveEvents, upcoming] = await Promise.all([getLiveEvents(), getUpcomingEvents(6)])
   const otherLive = liveEvents.filter((e) => e.id !== event.id)
 
@@ -55,8 +57,8 @@ export default async function LiveEventPage({ params }: { params: Promise<{ id: 
                   </Link>
                 </p>
               </div>
-            ) : event.providerRef ? (
-              <Player youtubeId={event.providerRef} title={event.title} live={phase === 'live'} />
+            ) : playback.kind !== 'none' ? (
+              <Player source={playback} title={event.title} live={phase === 'live'} />
             ) : (
               <div className="empty-state off-air">
                 <h2>{phase === 'ended' ? 'This broadcast has ended' : 'Not on air yet'}</h2>

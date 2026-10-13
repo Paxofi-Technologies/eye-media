@@ -66,7 +66,7 @@ Also in Cloudflare, for this subdomain:
 | `SITE_URL` | `https://eyetv.paxofi.com` (no slash at the end) |
 | `SITE_INDEXING` | `false` (staging must stay out of Google) |
 | `IP_HASH_SECRET` | a long random string (40+ characters, e.g. from a password generator) |
-| `MEDIA_DIR` | `/home/CPANELUSER/eyetv-staging-media`: where uploaded videos are stored. Create this folder first in File Manager. It must be **outside** `eyetv-staging`, so a new release never deletes it. Without it, video upload is switched off. |
+| `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_KEY_PRIVATE`, `MUX_WEBHOOK_SECRET` | From your Mux dashboard: follow **docs/MUX-SETUP.md** (Eye-TV-Mux-Setup-Guide.pdf). Without them video upload and live streaming are switched off. |
 
 4. Click **Create**. **Do not** click “Run NPM Install”: the release already contains everything it needs.
 5. Leave this page open. You'll come back to it.
@@ -116,7 +116,7 @@ You'll receive **`eye-tv-release.zip`** from the developer. Every passing build 
 
 ## Part C — Moving from staging to the production domain (later)
 
-1. Repeat **A1–A3** with the production domain and a **new, separate database**. For example: application root `eyetv-production`, `SITE_URL=https://<production domain>`, **`SITE_INDEXING=true`**, a new `IP_HASH_SECRET`, and its own `MEDIA_DIR` (e.g. `/home/CPANELUSER/eyetv-production-media`).
+1. Repeat **A1–A3** with the production domain and a **new, separate database**. For example: application root `eyetv-production`, `SITE_URL=https://<production domain>`, **`SITE_INDEXING=true`**, a new `IP_HASH_SECRET`.
 2. Upload the same release (**Part B**) and create the admin (**A5**). **Do not** load the demo content.
 3. Point an uptime monitor (e.g. UptimeRobot, free) at `https://<production domain>/api/health`.
 4. In cPanel **Backup**, confirm daily backups include the production database.
@@ -131,8 +131,7 @@ You'll receive **`eye-tv-release.zip`** from the developer. Every passing build 
 | Output says **Unknown database** | The database name in `DATABASE_URL` is missing the cPanel prefix | Use the full name, e.g. `cpuser_eyetv` |
 | Output says **ZodError … email / name** | `EYE_ADMIN_EMAIL` / `EYE_ADMIN_NAME` missing or invalid | Set both, click **Save**, run again |
 | Pages show but buttons/forms don't react | Cloudflare **Rocket Loader** is on | Turn it off (**A1b**) |
-| No “Drag & drop or click to upload” box | `MEDIA_DIR` is not set | Add it (**A3**), create the folder, **Restart** |
-| Upload stops with “Upload failed (500)” | The `MEDIA_DIR` folder is missing or not writable, or the disk quota is full | Check the folder exists; check *Disk Usage* in cPanel |
+| No “Drag & drop or click to upload” box, or “not set up on this server yet” | Mux variables missing | Follow MUX-SETUP.md, then **Restart** |
 | Links contain `//` | Old release with a trailing slash in `SITE_URL` | Remove the trailing slash, or upload the latest release |
 
 Every *Run JS script* command and the app itself print the real database error (with a code such as
@@ -141,8 +140,7 @@ Every *Run JS script* command and the app itself print the real database error (
 ## Requirements and limits (for reference)
 
 - Node.js **22+**, and MySQL 8 or MariaDB 10.6+.
-- **Uploaded videos** are stored as-is in `MEDIA_DIR`, up to 500MB each, and count against the cPanel disk quota and monthly bandwidth. They are served by the app with seeking support. They are **not converted**: most phone MP4s play everywhere, but some iPhone HEVC videos won't play in Chrome or Firefox. A video platform such as Mux (planned) converts every upload so it plays everywhere.
-- Back up `MEDIA_DIR` together with the database: cPanel's *Backup* includes home-directory files.
+- **Videos** are stored, converted and delivered by Mux (up to 500MB per upload), so they do not use cPanel disk space or bandwidth. Old files from before Mux (if `MEDIA_DIR` is still set) stay playable and should be backed up with the database.
 - One app process. Login and submission rate limits are kept in memory, which is fine on cPanel. Before running several processes on a VPS, they must move to Redis.
 - Password hashing uses a prebuilt Linux x64 module, which works on standard cPanel/CloudLinux servers.
 - **Moving to a VPS later:** copy the same release folder, run `node app.js` behind Nginx with pm2 or systemd, and set the same variables. The data moves with `mysqldump`. No code changes are needed.

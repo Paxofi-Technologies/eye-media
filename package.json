@@ -15,13 +15,15 @@
     "db:seed": "tsx scripts/seed.ts",
     "user:create": "tsx scripts/create-user.ts",
     "build:cpanel": "node scripts/build-cpanel.mjs",
-    "test:e2e": "node e2e/run.mjs",
+    "test:e2e": "node scripts/e2e.mjs",
     "docs:pdf": "node scripts/build-deploy-pdf.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "@mux/mux-player-react": "^3.14.0",
+    "@mux/upchunk": "^3.5.0",
     "@node-rs/argon2": "^2.2.2",
     "drizzle-orm": "^0.45.4",
     "mysql2": "^3.24.5",

@@ -17,7 +17,7 @@ const bodySchema = z.object({
   size: z.number().int().positive(),
 })
 
-/** Starts a chunked upload. Returns the id, a one-time token for the chunks, and the chunk size. */
+/** Starts a direct upload to Mux. Returns our upload id, a secret token for this upload, and Mux's upload URL. */
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return jsonError('Forbidden.', 403)
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))

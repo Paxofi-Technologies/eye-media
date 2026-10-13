@@ -78,7 +78,10 @@ export const videoCategories = mysqlTable('video_categories', {
   sortOrder: int('sort_order').notNull().default(0),
 })
 
-export const VIDEO_PROVIDERS = ['youtube', 'upload'] as const
+// 'mux' is the platform. 'youtube' and 'upload' are legacy values kept so existing rows keep playing
+// until they are replaced; no new media is created with them.
+export const VIDEO_PROVIDERS = ['youtube', 'upload', 'mux'] as const
+export const MEDIA_STATUSES = ['ready', 'processing', 'errored'] as const
 
 export const VIDEO_STATUSES = ['draft', 'pending', 'flagged', 'published', 'rejected', 'unpublished'] as const
 
@@ -96,6 +99,12 @@ export const videos = mysqlTable(
     // 'upload' = a file uploaded to Eye TV (MEDIA_DIR); provider_ref is then the media_uploads id.
     provider: mysqlEnum('provider', VIDEO_PROVIDERS).notNull().default('youtube'),
     providerRef: varchar('provider_ref', { length: 64 }),
+    // Mux: the asset plus its two playback ids. The private (signed) id exists from upload and is only
+    // ever used for staff preview; the public id exists only while the video is published.
+    muxAssetId: varchar('mux_asset_id', { length: 64 }),
+    muxPrivatePlaybackId: varchar('mux_private_playback_id', { length: 64 }),
+    muxPublicPlaybackId: varchar('mux_public_playback_id', { length: 64 }),
+    mediaStatus: mysqlEnum('media_status', MEDIA_STATUSES).notNull().default('ready'),
     // Untrusted link supplied by a citizen; only ever shown to staff, never embedded.
     submittedMediaUrl: varchar('submitted_media_url', { length: 500 }),
     thumbnailUrl: varchar('thumbnail_url', { length: 500 }),
@@ -118,6 +127,7 @@ export const videos = mysqlTable(
     uniqueIndex('videos_slug_idx').on(t.slug),
     index('videos_status_published_idx').on(t.status, t.publishedAt),
     index('videos_category_idx').on(t.categoryId),
+    index('videos_mux_asset_idx').on(t.muxAssetId),
   ],
 )
 
@@ -161,6 +171,9 @@ export const mediaUploads = mysqlTable(
     purpose: mysqlEnum('purpose', ['citizen', 'staff']).notNull(),
     status: mysqlEnum('status', ['uploading', 'complete', 'attached']).notNull().default('uploading'),
     tokenHash: char('token_hash', { length: 64 }).notNull(),
+    // Mux direct upload and the asset it produced (set once the browser has finished sending the file).
+    muxUploadId: varchar('mux_upload_id', { length: 64 }),
+    muxAssetId: varchar('mux_asset_id', { length: 64 }),
     originalName: varchar('original_name', { length: 200 }).notNull(),
     mimeType: varchar('mime_type', { length: 60 }).notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
@@ -219,9 +232,17 @@ export const liveEvents = mysqlTable(
     // City/venue shown on the schedule and used by its location filter, e.g. "Lagos", "Abuja".
     city: varchar('city', { length: 80 }),
     venue: varchar('venue', { length: 160 }),
-    provider: mysqlEnum('provider', ['youtube']).notNull().default('youtube'),
-    // Public YouTube video id of the broadcast. Stream keys never live in Eye TV.
+    provider: mysqlEnum('provider', VIDEO_PROVIDERS).notNull().default('mux'),
+    // Legacy YouTube video id (existing events only).
     providerRef: varchar('provider_ref', { length: 64 }),
+    // Mux live stream. The stream key itself is NOT stored: it is fetched from Mux when authorised staff ask.
+    muxLiveStreamId: varchar('mux_live_stream_id', { length: 64 }),
+    muxPrivatePlaybackId: varchar('mux_private_playback_id', { length: 64 }),
+    muxPublicPlaybackId: varchar('mux_public_playback_id', { length: 64 }),
+    // Latest recording produced by the stream (becomes the replay).
+    recordingAssetId: varchar('recording_asset_id', { length: 64 }),
+    // true: go live automatically when the encoder connects. false: an editor presses Go live.
+    autoLive: boolean('auto_live').notNull().default(false),
     status: mysqlEnum('status', LIVE_EVENT_STATUSES).notNull().default('scheduled'),
     featured: boolean('featured').notNull().default(false),
     startsAt: ts('starts_at').notNull(),
@@ -237,7 +258,22 @@ export const liveEvents = mysqlTable(
   (t) => [
     index('live_events_starts_idx').on(t.startsAt),
     index('live_events_status_idx').on(t.status, t.startsAt),
+    index('live_events_mux_stream_idx').on(t.muxLiveStreamId),
   ],
+)
+
+/** Mux webhook deliveries: de-duplicates retries and shows "last event received" in the admin. */
+export const muxEvents = mysqlTable(
+  'mux_events',
+  {
+    id: varchar('id', { length: 64 }).primaryKey(),
+    type: varchar('type', { length: 80 }).notNull(),
+    objectId: varchar('object_id', { length: 64 }),
+    receivedAt: ts('received_at').notNull().$defaultFn(now),
+    processedAt: ts('processed_at'),
+    error: text('error'),
+  },
+  (t) => [index('mux_events_received_idx').on(t.receivedAt)],
 )
 
 /* ------------------------------------------------------------------ */
@@ -268,5 +304,6 @@ export type VideoStatus = (typeof VIDEO_STATUSES)[number]
 export type VideoCategory = typeof videoCategories.$inferSelect
 export type LiveEvent = typeof liveEvents.$inferSelect
 export type MediaUpload = typeof mediaUploads.$inferSelect
+export type MediaStatus = (typeof MEDIA_STATUSES)[number]
 export type VideoProvider = (typeof VIDEO_PROVIDERS)[number]
 export type LiveEventStatus = (typeof LIVE_EVENT_STATUSES)[number]

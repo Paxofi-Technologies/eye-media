@@ -20,7 +20,7 @@ export function LiveEventActions({
   canMakeReplay,
   back,
 }: {
-  event: { id: string; status: LiveEventStatus; providerRef: string | null; startedAt: Date | null; replayVideoId: string | null }
+  event: { id: string; status: LiveEventStatus; recordingAssetId: string | null; providerRef: string | null; startedAt: Date | null; replayVideoId: string | null }
   canMakeReplay: boolean
   back?: 'detail'
 }) {
@@ -33,7 +33,7 @@ export function LiveEventActions({
       {status === 'live' && <StatusButton id={id} status="ended" label="End stream" className="btn-ghost" back={back} />}
       {status === 'scheduled' && <StatusButton id={id} status="cancelled" label="Cancel" className="btn-ghost" back={back} />}
       {status === 'cancelled' && <StatusButton id={id} status="scheduled" label="Reschedule" className="btn-ghost" back={back} />}
-      {status === 'ended' && canMakeReplay && event.providerRef && (
+      {status === 'ended' && canMakeReplay && (event.recordingAssetId || event.providerRef) && (
         <form action={createReplayFromEvent}>
           <input type="hidden" name="id" value={id} />
           <button className="btn btn-sm btn-approve" type="submit">
