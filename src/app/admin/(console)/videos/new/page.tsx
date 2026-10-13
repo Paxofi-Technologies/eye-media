@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { MuxNotice } from '@/components/admin/MuxNotice'
 import Link from 'next/link'
 import { Restricted } from '@/components/admin/Restricted'
 import { VideoForm } from '@/components/admin/VideoForm'
@@ -24,6 +25,7 @@ export default async function NewVideoPage() {
         </div>
         <Link className="btn btn-ghost" href="/admin/videos">Cancel</Link>
       </div>
+      <MuxNotice />
       <div style={{ maxWidth: 820 }}>
         <VideoForm initial={null} categories={categories} canEdit uploadsEnabled={uploadsEnabled()} />
       </div>

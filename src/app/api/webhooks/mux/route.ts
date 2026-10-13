@@ -6,6 +6,14 @@ import { verifyWebhookSignature } from '@/lib/mux-security'
 
 export const dynamic = 'force-dynamic'
 
+/** Opening the address in a browser: confirms the route exists and the secret is set (Mux itself only POSTs). */
+export async function GET() {
+  return Response.json(
+    { endpoint: 'mux-webhook', accepts: 'POST', secretConfigured: Boolean(process.env.MUX_WEBHOOK_SECRET?.trim()) },
+    { headers: { 'Cache-Control': 'no-store' } },
+  )
+}
+
 export async function POST(req: Request) {
   const secret = process.env.MUX_WEBHOOK_SECRET?.trim()
   if (!secret) return Response.json({ error: 'Webhook not configured.' }, { status: 503 })

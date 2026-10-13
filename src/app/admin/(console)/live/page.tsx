@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { MuxNotice } from '@/components/admin/MuxNotice'
 import Link from 'next/link'
 import { LiveEventActions } from '@/components/admin/LiveEventActions'
 import { LiveEventForm } from '@/components/admin/LiveForms'
@@ -89,13 +90,14 @@ export default async function LiveAdminPage({ searchParams }: { searchParams: Pr
         <div>
           <h1>Live &amp; Schedule</h1>
           <div className="sub">
-            Any number of broadcasts can be live at once. Each event gets its own YouTube Live video, from any camera or phone.
+            Any number of broadcasts can be live at once. Each event gets its own Mux stream, from any camera or phone.
           </div>
         </div>
         <Link className="btn btn-ghost" href="/tv/schedule" target="_blank">
           View public schedule ↗
         </Link>
       </div>
+      <MuxNotice />
       {sp.error && <div className="alert alert-error" role="alert">{sp.error.slice(0, 200)}</div>}
       <div className="two-col">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
