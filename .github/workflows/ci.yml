@@ -65,10 +65,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests
-        run: |
-          npm start > next.log 2>&1 &
-          npx --yes wait-on@8.0.3 -t 60000 http://localhost:3000/api/health
-          E2E_PASSWORD="$SEED_ADMIN_PASSWORD" npm run test:e2e
+        # Starts the app itself, together with a mock Mux server (no real credentials).
+        run: E2E_PASSWORD="$SEED_ADMIN_PASSWORD" npm run test:e2e
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -76,6 +74,4 @@ jobs:
           name: screenshots
           path: screenshots/
           retention-days: 14
-      - name: Server log on failure
-        if: failure()
-        run: cat next.log || true
+
