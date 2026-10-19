@@ -18,7 +18,7 @@ import { describeError, runMigrations } from './migrate'
 
 const DEMO_YT = 'SlbyzVMQ44w' // public clip used by the prototype to demonstrate playback
 
-const CONTENT_TABLES = ['audit_log', 'live_events', 'media_uploads', 'mux_events', 'schedule_items', 'moderation_reviews', 'videos']
+const CONTENT_TABLES = ['audit_log', 'live_events', 'media_uploads', 'mux_events', 'eye_report_events', 'schedule_items', 'moderation_reviews', 'videos']
 
 const HOUR = 3_600_000
 const ago = (h: number) => new Date(Date.now() - h * HOUR)

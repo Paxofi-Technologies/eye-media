@@ -67,6 +67,8 @@ Also in Cloudflare, for this subdomain:
 | `SITE_INDEXING` | `false` (staging must stay out of Google) |
 | `IP_HASH_SECRET` | a long random string (40+ characters, e.g. from a password generator) |
 | `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_KEY_PRIVATE`, `MUX_WEBHOOK_SECRET` | From your Mux dashboard: follow **docs/MUX-SETUP.md** (Eye-TV-Mux-Setup-Guide.pdf). Without them video upload and live streaming are switched off. |
+| `EYE_REPORT_WEBHOOK_SECRET` | Shared secret with the EyeReport platform: **64 random letters and numbers** (e.g. `openssl rand -hex 32`, minimum 40), different for staging and production. Needed for the EyeReport hand-off. See docs/EYE-REPORT-INTEGRATION.md. |
+| `EYE_REPORT_CALLBACK_URL` | The https address on EyeReport where Eye TV reports publish/reject decisions (given by the EyeReport team). Optional until EyeReport is ready. |
 
 4. Click **Create**. **Do not** click “Run NPM Install”: the release already contains everything it needs.
 5. Leave this page open. You'll come back to it.

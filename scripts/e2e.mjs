@@ -18,7 +18,7 @@ const eyeReportSecret = 'test-eyereport-secret'
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
 const keyB64 = Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
 
-const mock = await startMockMux({ port: MOCK_PORT, appUrl, tokenId, tokenSecret, webhookSecret })
+const mock = await startMockMux({ port: MOCK_PORT, appUrl, tokenId, tokenSecret, webhookSecret, eyeReportSecret })
 
 const app = spawn('npx', ['next', 'start', '-p', String(APP_PORT)], {
   stdio: ['ignore', 'inherit', 'inherit'],
@@ -32,6 +32,7 @@ const app = spawn('npx', ['next', 'start', '-p', String(APP_PORT)], {
     MUX_SIGNING_KEY_ID: 'test-key-id',
     MUX_SIGNING_KEY_PRIVATE: keyB64,
     EYE_REPORT_WEBHOOK_SECRET: eyeReportSecret,
+    EYE_REPORT_CALLBACK_URL: `${mock.url}/__er/callback`,
   },
 })
 

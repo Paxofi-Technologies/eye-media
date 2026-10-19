@@ -264,6 +264,25 @@ export const muxEvents = mysqlTable(
   (t) => [index('mux_events_received_idx').on(t.receivedAt)],
 )
 
+/** Outbox of decisions to report back to EyeReport; delivered with retries so a temporary outage loses nothing. */
+export const EYE_REPORT_EVENTS = ['published', 'rejected', 'unpublished'] as const
+export type EyeReportEventType = (typeof EYE_REPORT_EVENTS)[number]
+export const eyeReportEvents = mysqlTable(
+  'eye_report_events',
+  {
+    id: id(),
+    videoId: ref('video_id').references(() => videos.id, { onDelete: 'cascade' }),
+    externalRef: varchar('external_ref', { length: 100 }).notNull(),
+    event: mysqlEnum('event', EYE_REPORT_EVENTS).notNull(),
+    createdAt: ts('created_at').notNull().$defaultFn(now),
+    attempts: int('attempts').notNull().default(0),
+    nextAttemptAt: ts('next_attempt_at').notNull().$defaultFn(now),
+    deliveredAt: ts('delivered_at'),
+    lastError: text('last_error'),
+  },
+  (t) => [index('eye_report_events_due_idx').on(t.deliveredAt, t.nextAttemptAt)],
+)
+
 /* ------------------------------------------------------------------ */
 /* Audit                                                               */
 /* ------------------------------------------------------------------ */

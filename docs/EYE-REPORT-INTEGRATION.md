@@ -5,8 +5,16 @@ Eye TV puts it in its **review queue** (status *pending*, shown as “From EyeRe
 Nothing is published on Eye TV automatically, and **no personal details of the citizen are ever sent**.
 
 ## 1. One-time setup
-1. Agree a long random **shared secret** (40+ characters). Never put it in source code or chat.
-2. **Eye TV (cPanel → Setup Node.js App):** add the variable `EYE_REPORT_WEBHOOK_SECRET` = the secret → Save → Restart.
+1. Create a **shared secret**: **64 characters of random letters and numbers** (32 random bytes written as hex). Minimum 40 characters, no spaces, never reused from another system. How to make one:
+   - Terminal: `openssl rand -hex 32`
+   - or a password generator set to 64 characters, letters and numbers only.
+   Use a **different secret for staging and for production**. Share it with the EyeReport team through a password manager, never by chat or email, and never put it in source code.
+2. **Eye TV (cPanel → Setup Node.js App → Add Variable):**
+   | Name | Value |
+   |---|---|
+   | `EYE_REPORT_WEBHOOK_SECRET` | the shared secret |
+   | `EYE_REPORT_CALLBACK_URL` | the https address on EyeReport that receives Eye TV's decisions (section 5) |
+   Then **Save** and **Restart**. Without the secret the hand-off answers 503; without the callback address, decisions are kept and sent once the address is added.
 3. **EyeReport:** store the same secret in its own secret store / environment.
 4. Endpoint: `POST https://webtv.eyemedia.ng/api/integrations/eye-report` (use the staging address while testing).
 5. Eye TV must also have Mux connected (see the Mux setup guide), because Eye TV hands the video link to Mux.
@@ -67,4 +75,19 @@ $v1 = hash_hmac('sha256', $t . '.' . $body, getenv('EYE_REPORT_WEBHOOK_SECRET'))
 2. It is ready to review after Mux finishes processing (usually a few minutes). The editor completes the checklist and approves or rejects.
 3. Only when an editor approves does the video get a public link and appear on Eye TV.
 4. The audit log records the hand-over (“Received video from EyeReport”).
-5. Eye TV does not tell EyeReport when an editor publishes or rejects. If EyeReport needs that, we will add a callback (not in this version).
+5. Eye TV tells EyeReport about the decision (section 5).
+
+## 5. Eye TV → EyeReport: decision callback
+When an Eye TV editor **publishes**, **rejects** or later **unpublishes** a video that came from EyeReport, Eye TV calls EyeReport.
+EyeReport provides a URL for this (`EYE_REPORT_CALLBACK_URL`) and verifies the signature, exactly like the other direction but with the header **`X-EyeTV-Signature`** (same secret, same `t=…,v1=…` format, HMAC of `<t>.<raw body>`).
+
+```json
+{ "event": "video.published", "externalId": "ER-1042", "videoId": "…",
+  "eyeTvUrl": "https://webtv.eyemedia.ng/tv/pothole-on-ojota-flyover-ab12c",
+  "occurredAt": "2026-10-19T17:02:11.000Z" }
+```
+- `event` is `video.published`, `video.rejected` or `video.unpublished`. `eyeTvUrl` is only set for `video.published`.
+- `externalId` is the id EyeReport used in the hand-over. Use `occurredAt` to order events if several arrive for one report.
+- **Rejection reasons are internal and are never sent.** EyeReport should show the citizen a neutral status.
+- Answer with any `2xx` status to confirm. Anything else (or no answer within 10 seconds) is retried automatically: after 1, 2, 4, 8 … minutes up to 6 hours, 12 attempts in all. Make your receiver safe to call twice with the same event.
+- Rejected or unpublished videos are not deleted on EyeReport's side by Eye TV; EyeReport decides what to show.

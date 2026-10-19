@@ -136,6 +136,9 @@ check('hand-off with a wrong secret is refused', (await sendToEyeTv(erPayload, '
 check('hand-off refuses citizen details', (await sendToEyeTv({ ...erPayload, externalId: ER_ID + 'x', phone: '+234 801 234 5678' })).status === 400)
 const er1 = await sendToEyeTv(erPayload)
 check('EyeReport hand-off creates a pending Eye TV video', er1.status === 201 && er1.body.status === 'pending')
+const ER2_TITLE = `EyeReport second ${RUN}`
+const er2b = await sendToEyeTv({ ...erPayload, externalId: ER_ID + '-b', title: ER2_TITLE, videoUrl: 'https://files.example.com/er/1043.mp4' })
+check('a second hand-over is accepted', er2b.status === 201)
 const er2 = await sendToEyeTv(erPayload)
 check('repeating the hand-off does not create a second video', er2.status === 200 && er2.body.duplicate === true && er2.body.id === er1.body.id)
 const erAsset = (await mockState()).assets.find((x) => x.input?.[0]?.url === erPayload.videoUrl)
@@ -201,6 +204,32 @@ check('approved item left the queue', !(await a.getByText(STORY).isVisible()))
 st = await mockState()
 const publicPb = st.assets.find((x) => x.id === asset.id).playback_ids.find((x) => x.policy === 'public')
 check('publishing adds a public playback id on Mux', Boolean(publicPb))
+
+// the EyeReport hand-over: editor approves one and rejects the other; EyeReport is told about both
+async function reviewEyeReport(title, decision, note) {
+  await a.goto(BASE + '/admin')
+  await a.getByText(title).click()
+  await a.waitForURL(/id=/)
+  if (decision === 'approved') {
+    for (const box of await a.locator('.checklist input[type=checkbox]').all()) await box.check()
+    await a.getByRole('button', { name: /Approve/ }).click()
+  } else {
+    await a.fill('#notes', note)
+    await a.getByRole('button', { name: /Reject/ }).click()
+  }
+  await a.waitForURL(BASE + '/admin')
+}
+for (let i = 0; i < 30 && (await mockState()).assets.filter((x) => x.input && x.status === 'ready').length < 2; i++) await sleep(500)
+await sleep(1500)
+await reviewEyeReport(ER_TITLE, 'approved')
+await reviewEyeReport(ER2_TITLE, 'rejected', 'INTERNAL-NOTE-do-not-share')
+let cbs = []
+for (let i = 0; i < 20 && cbs.length < 2; i++) { cbs = (await mockState()).callbacks; await sleep(500) }
+const cbPub = cbs.find((c) => c.body.event === 'video.published')
+const cbRej = cbs.find((c) => c.body.event === 'video.rejected')
+check('EyeReport is told when the video is published (signed)', Boolean(cbPub) && cbPub.valid && cbPub.body.externalId === ER_ID && cbPub.body.eyeTvUrl.includes('/tv/'))
+check('EyeReport is told when the video is rejected', Boolean(cbRej) && cbRej.valid && cbRej.body.externalId === ER_ID + '-b')
+check('the internal rejection note is never sent', !JSON.stringify(cbs).includes('INTERNAL-NOTE'))
 
 // reject without note -> error
 await a.locator('.q-item').first().click()

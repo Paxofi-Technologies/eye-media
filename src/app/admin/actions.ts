@@ -20,6 +20,7 @@ import {
   transitionEvent,
 } from '@/lib/mux-ops'
 import { addSimulcastTarget, getLiveStream, removeSimulcastTarget, resetStreamKey } from '@/lib/mux'
+import { queueEyeReportEvent } from '@/lib/eye-report-callback'
 import { canEditVideo } from '@/lib/rbac'
 import { RESERVED_SLUGS, videoSlug } from '@/lib/slug'
 import {
@@ -135,6 +136,7 @@ export async function moderate(_prev: ActionState, form: FormData): Promise<Acti
   await recordAudit(user, `moderation.${decision}`, { type: 'video', id: video.id, label: video.title }, notes)
   revalidatePath('/admin', 'layout')
   if (decision === 'approved') revalidatePublic()
+  if (decision === 'approved' || decision === 'rejected') await queueEyeReportEvent(video.id, decision === 'approved' ? 'published' : 'rejected')
   redirect('/admin')
 }
 
@@ -315,6 +317,7 @@ export async function changeVideoStatus(form: FormData): Promise<void> {
   const action =
     status === 'published' ? 'video.published' : status === 'unpublished' ? 'video.unpublished' : 'video.status_changed'
   await recordAudit(user, action, { type: 'video', id, label: video.title }, `${video.status} → ${status}`)
+  if (status === 'published' || status === 'unpublished') await queueEyeReportEvent(id, status)
   revalidatePath('/admin', 'layout')
   revalidatePublic()
   redirect(`/admin/videos/${id}`)

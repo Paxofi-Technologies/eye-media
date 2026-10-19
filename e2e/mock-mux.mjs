@@ -8,7 +8,8 @@ import { createServer } from 'node:http'
 
 const id = (n = 12) => randomBytes(n).toString('hex')
 
-export function startMockMux({ port, appUrl, tokenId, tokenSecret, webhookSecret }) {
+export function startMockMux({ port, appUrl, tokenId, tokenSecret, webhookSecret, eyeReportSecret = '' }) {
+  const callbacks = [] // what Eye TV reported back to "EyeReport"
   const uploads = new Map()
   const assets = new Map()
   const streams = new Map()
@@ -83,9 +84,20 @@ export function startMockMux({ port, appUrl, tokenId, tokenSecret, webhookSecret
       return send(res, 308, undefined)
     }
 
+    // ---- a stand-in for EyeReport's receiving endpoint (Eye TV → EyeReport callbacks) ----
+    if (path === '/__er/callback' && m === 'POST') {
+      const raw = (await readBody(req)).toString()
+      const header = req.headers['x-eyetv-signature'] ?? ''
+      const parts = Object.fromEntries(String(header).split(',').map((p) => p.split('=')))
+      const expected = createHmac('sha256', eyeReportSecret).update(`${parts.t}.${raw}`).digest('hex')
+      const valid = parts.v1 === expected
+      callbacks.push({ valid, body: JSON.parse(raw) })
+      return send(res, valid ? 200 : 401, {})
+    }
+
     // ---- control endpoints used by the tests ----
     if (path === '/__mock/state') {
-      return send(res, 200, { uploads: [...uploads.values()], assets: [...assets.values()], streams: [...streams.values()], webhooks })
+      return send(res, 200, { uploads: [...uploads.values()], assets: [...assets.values()], streams: [...streams.values()], webhooks, callbacks })
     }
     match = path.match(/^\/__mock\/live\/([0-9a-f]+)\/(active|idle)$/)
     if (match && m === 'POST') {
