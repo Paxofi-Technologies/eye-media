@@ -115,6 +115,16 @@ export function VideoForm({
               Video upload isn&apos;t set up yet. Add the Mux access token and signing key (see the Mux setup guide), then restart the app.
             </div>
           ) : null}
+          {uploadsEnabled && canEdit && v?.status !== 'published' && (
+            <Field
+              id="videoUrl"
+              label="Or paste a link to the video"
+              hint="A direct https link to a video file (MP4 or MOV), for example a download link from cloud storage. Links to YouTube, Facebook, Instagram or TikTok pages cannot be imported. If you also upload a file, the upload is used."
+              error={e.videoUrl}
+            >
+              {(p) => <input {...p} name="videoUrl" type="url" maxLength={2000} placeholder="https://…/video.mp4" autoComplete="off" />}
+            </Field>
+          )}
           {e.upload && (
             <div className="field-error" role="alert" style={{ marginTop: -8, marginBottom: 12 }}>
               {e.upload}

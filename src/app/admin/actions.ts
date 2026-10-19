@@ -16,6 +16,7 @@ import {
   deleteAssetQuietly,
   deleteStreamQuietly,
   ensurePublicAssetId,
+  importVideoFromUrl,
   removePublicAssetId,
   transitionEvent,
 } from '@/lib/mux-ops'
@@ -212,7 +213,6 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
     values.editorsPick = existing?.editorsPick ?? false
     values.verified = existing?.verified ?? false
   }
-  if (id && !existing) return { ok: false, message: 'This video no longer exists.' }
 
   // Video source: a newly uploaded file replaces whatever is attached; otherwise nothing about the media changes.
   const uploadId = form.get('uploadId')
@@ -227,6 +227,22 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
       return { ok: false, message: 'The video upload did not finish. Please upload it again.', errors: { upload: 'Upload the file again, then save.' } }
     }
     media = { ...(await muxFieldsForAsset(upload.muxAssetId)) }
+    if (media.durationSeconds == null) delete media.durationSeconds
+    replacedAssetId = existing?.provider === 'mux' ? existing.muxAssetId : null
+  } else if (d.videoUrl) {
+    // "Paste a link": Mux downloads the file itself. Only direct links to a video file work, not YouTube/Facebook pages.
+    if (existing?.status === 'published') {
+      return { ok: false, message: 'Unpublish this video before replacing it.', errors: { videoUrl: 'Unpublish the story first.' } }
+    }
+    try {
+      media = { ...(await importVideoFromUrl(d.videoUrl)) }
+    } catch (e) {
+      return {
+        ok: false,
+        message: 'Mux could not use that link.',
+        errors: { videoUrl: `${mediaErrorText(e)} Use a direct link to a video file (MP4 or MOV), not a YouTube or social media page.` },
+      }
+    }
     if (media.durationSeconds == null) delete media.durationSeconds
     replacedAssetId = existing?.provider === 'mux' ? existing.muxAssetId : null
   }

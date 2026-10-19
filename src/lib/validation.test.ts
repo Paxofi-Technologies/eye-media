@@ -15,6 +15,12 @@ describe('videoSchema', () => {
     expect(r.categoryId).toBeNull()
     expect(r.summary).toBeNull()
   })
+  it('accepts only an https video link, or none', () => {
+    expect(videoSchema.parse(base).videoUrl).toBeNull()
+    expect(videoSchema.parse({ ...base, videoUrl: 'https://files.example.com/a.mp4' }).videoUrl).toBe('https://files.example.com/a.mp4')
+    expect(videoSchema.safeParse({ ...base, videoUrl: 'http://files.example.com/a.mp4' }).success).toBe(false)
+    expect(videoSchema.safeParse({ ...base, videoUrl: 'javascript:alert(1)' }).success).toBe(false)
+  })
   it('rejects bad slugs', () => {
     expect(videoSchema.safeParse({ ...base, slug: 'Bad Slug' }).success).toBe(false)
   })

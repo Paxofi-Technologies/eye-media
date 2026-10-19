@@ -92,6 +92,15 @@ export const videoSchema = z.object({
       ).slice(0, 20),
     ),
   reporterName: optionalText(120),
+  // A direct https link to a video file; Mux downloads it. Empty means "no link".
+  videoUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .default('')
+    .refine((v) => v === '' || /^https:\/\/[^\s]+$/i.test(v), 'Use a full https:// link to the video file.')
+    .transform((v) => (v === '' ? null : v)),
   verified: checkbox,
   featured: checkbox,
   editorsPick: checkbox,

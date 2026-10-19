@@ -1,12 +1,15 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '@/db'
 import type { LiveEvent } from '@/db/schema'
+import type { MuxMediaFields } from './uploads'
 import {
   MuxError,
   addAssetPlaybackId,
   addLivePlaybackId,
   completeLiveStream,
+  createAssetFromUrl,
   createLiveStream,
   deleteAsset,
   deleteLiveStream,
@@ -39,6 +42,19 @@ export async function removePublicAssetId(assetId: string, publicId: string): Pr
     await removeAssetPlaybackId(assetId, publicId)
   } catch (e) {
     if (!isNotFound(e)) throw e
+  }
+}
+
+/** Asks Mux to download a video from a direct https link (staff "paste a link"). The asset is private until published. */
+export async function importVideoFromUrl(url: string): Promise<MuxMediaFields> {
+  const asset = await createAssetFromUrl({ url, passthrough: randomUUID() })
+  return {
+    provider: 'mux',
+    providerRef: null,
+    muxAssetId: asset.id,
+    muxPrivatePlaybackId: policyId(asset.playback_ids, 'signed'),
+    mediaStatus: 'processing',
+    durationSeconds: null,
   }
 }
 
