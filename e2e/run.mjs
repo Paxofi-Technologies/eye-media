@@ -80,7 +80,7 @@ check('old submit page redirects to the home page', new URL(p.url()).pathname ==
 check('no "Report a story" link anywhere in the public nav', (await p.getByRole('link', { name: 'Report a story' }).count()) === 0)
 const anonUpload = await (await browser.newContext()).request.post(BASE + '/api/uploads', {
   headers: { origin: BASE },
-  data: { purpose: 'citizen', name: 'x.mp4', size: 1000 },
+  data: { purpose: 'staff', name: 'x.mp4', size: 1000 },
 })
 check('anonymous upload is refused', anonUpload.status() === 403)
 

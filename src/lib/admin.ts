@@ -55,22 +55,6 @@ export async function getVideoForStaff(id: string) {
   return row ?? null
 }
 
-/** PII: callers must check the `submission.contact.view` permission first. */
-export async function getSubmitterContact(videoId: string) {
-  const [row] = await db
-    .select({
-      reference: schema.submitterContacts.reference,
-      name: schema.submitterContacts.name,
-      email: schema.submitterContacts.email,
-      phone: schema.submitterContacts.phone,
-      consentAt: schema.submitterContacts.consentAt,
-    })
-    .from(schema.submitterContacts)
-    .where(eq(schema.submitterContacts.videoId, videoId))
-    .limit(1)
-  return row ?? null
-}
-
 export async function getModerationHistory(videoId: string) {
   return db
     .select({

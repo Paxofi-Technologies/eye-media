@@ -14,7 +14,6 @@ export const PERMISSIONS = [
   'schedule.manage',
   'audit.view',
   'users.manage',
-  'submission.contact.view',
 ] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
@@ -29,9 +28,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'live.manage',
     'schedule.manage',
     'audit.view',
-    'submission.contact.view',
   ],
-  moderator: ['queue.view', 'queue.moderate', 'video.view', 'submission.contact.view'],
+  moderator: ['queue.view', 'queue.moderate', 'video.view'],
   media_manager: ['video.view', 'video.edit', 'live.manage', 'schedule.manage'],
   // Reporters (Eye Media staff in the field) create and edit their own drafts and send them for review.
   reporter: ['video.view', 'video.edit'],

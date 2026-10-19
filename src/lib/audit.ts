@@ -5,7 +5,6 @@ import type { SessionUser } from './auth'
 export type AuditAction =
   | 'auth.login'
   | 'auth.logout'
-  | 'submission.created'
   | 'video.created'
   | 'video.updated'
   | 'video.published'
@@ -36,7 +35,6 @@ export type AuditAction =
 export const AUDIT_LABELS: Record<AuditAction, string> = {
   'auth.login': 'Signed in',
   'auth.logout': 'Signed out',
-  'submission.created': 'Submitted',
   'video.created': 'Created video',
   'video.updated': 'Edited metadata',
   'video.published': 'Published',

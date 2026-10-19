@@ -94,7 +94,7 @@ export const videos = mysqlTable(
     summary: varchar('summary', { length: 400 }),
     description: text('description'),
     categoryId: ref('category_id').references(() => videoCategories.id, { onDelete: 'set null' }),
-    source: mysqlEnum('source', ['staff', 'citizen']).notNull().default('staff'),
+    source: mysqlEnum('source', ['staff', 'eye_report']).notNull().default('staff'),
     // Provider abstraction (SRS §10): only YouTube for MVP, extendable later.
     // 'upload' = a file uploaded to Eye TV (MEDIA_DIR); provider_ref is then the media_uploads id.
     provider: mysqlEnum('provider', VIDEO_PROVIDERS).notNull().default('youtube'),
@@ -105,8 +105,6 @@ export const videos = mysqlTable(
     muxPrivatePlaybackId: varchar('mux_private_playback_id', { length: 64 }),
     muxPublicPlaybackId: varchar('mux_public_playback_id', { length: 64 }),
     mediaStatus: mysqlEnum('media_status', MEDIA_STATUSES).notNull().default('ready'),
-    // Untrusted link supplied by a citizen; only ever shown to staff, never embedded.
-    submittedMediaUrl: varchar('submitted_media_url', { length: 500 }),
     thumbnailUrl: varchar('thumbnail_url', { length: 500 }),
     durationSeconds: int('duration_seconds'),
     location: varchar('location', { length: 160 }),
@@ -131,19 +129,6 @@ export const videos = mysqlTable(
   ],
 )
 
-// PII for citizen submissions is isolated so public queries can never join it by accident (NFR-05).
-export const submitterContacts = mysqlTable('submitter_contacts', {
-  videoId: ref('video_id')
-    .primaryKey()
-    .references(() => videos.id, { onDelete: 'cascade' }),
-  reference: varchar('reference', { length: 20 }).notNull().unique(),
-  name: varchar('name', { length: 120 }).notNull(),
-  email: varchar('email', { length: 254 }),
-  phone: varchar('phone', { length: 40 }),
-  ipHash: char('ip_hash', { length: 64 }),
-  consentAt: ts('consent_at').notNull(),
-})
-
 export const moderationReviews = mysqlTable(
   'moderation_reviews',
   {
@@ -161,14 +146,14 @@ export const moderationReviews = mysqlTable(
 )
 
 /**
- * Video files uploaded in chunks by citizens (Report a story) or staff (video registry).
+ * Direct uploads to Mux started by staff and reporters (video registry).
  * Files live under MEDIA_DIR, outside the app folder, keyed by id; only the token *hash* is stored.
  */
 export const mediaUploads = mysqlTable(
   'media_uploads',
   {
     id: id(),
-    purpose: mysqlEnum('purpose', ['citizen', 'staff']).notNull(),
+    purpose: mysqlEnum('purpose', ['staff']).notNull(),
     status: mysqlEnum('status', ['uploading', 'complete', 'attached']).notNull().default('uploading'),
     tokenHash: char('token_hash', { length: 64 }).notNull(),
     // Mux direct upload and the asset it produced (set once the browser has finished sending the file).

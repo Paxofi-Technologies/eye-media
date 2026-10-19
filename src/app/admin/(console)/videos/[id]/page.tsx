@@ -8,7 +8,7 @@ import { VideoForm } from '@/components/admin/VideoForm'
 import { Player } from '@/components/tv/Player'
 import { playbackForVideo } from '@/lib/playback-server'
 import type { VideoStatus } from '@/db/schema'
-import { getModerationHistory, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
+import { getModerationHistory, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatCount, formatDateTime } from '@/lib/format'
 import { can, canEditVideo, canViewVideo } from '@/lib/rbac'
@@ -45,11 +45,7 @@ export default async function EditVideoPage({
   const v = row.video
   if (!canViewVideo(user, v)) notFound()
 
-  const [categories, history, contact] = await Promise.all([
-    getCategories(),
-    getModerationHistory(v.id),
-    v.source === 'citizen' && can(user.role, 'submission.contact.view') ? getSubmitterContact(v.id) : null,
-  ])
+  const [categories, history] = await Promise.all([getCategories(), getModerationHistory(v.id)])
   const canEdit = canEditVideo(user, v)
   const canPublish = can(user.role, 'video.publish')
   const inQueue = v.status === 'pending' || v.status === 'flagged'
@@ -60,7 +56,7 @@ export default async function EditVideoPage({
         <div>
           <h1>{v.title}</h1>
           <div className="sub">
-            <StatusPill status={v.status} /> · {v.source === 'citizen' ? 'Earlier public submission' : 'Eye Media video'} · updated{' '}
+            <StatusPill status={v.status} /> · {v.source === 'eye_report' ? 'From EyeReport' : 'Eye Media video'} · updated{' '}
             {formatDateTime(v.updatedAt)}
           </div>
         </div>
@@ -117,24 +113,6 @@ export default async function EditVideoPage({
             </div>
             {!canPublish && <p className="field-hint">An editor must review and publish this video before it goes live.</p>}
           </div>
-
-          {contact && (
-            <div className="form-panel">
-              <h2>Submitter · confidential</h2>
-              <div className="kv-row"><span className="k">Reference</span><span className="v">{contact.reference}</span></div>
-              <div className="kv-row"><span className="k">Name</span><span className="v">{contact.name}</span></div>
-              {contact.email && <div className="kv-row"><span className="k">Email</span><span className="v">{contact.email}</span></div>}
-              {contact.phone && <div className="kv-row"><span className="k">Phone</span><span className="v">{contact.phone}</span></div>}
-              {v.submittedMediaUrl && (
-                <div className="kv-row">
-                  <span className="k">Link</span>
-                  <span className="v">
-                    <a href={v.submittedMediaUrl} target="_blank" rel="noopener noreferrer nofollow">{v.submittedMediaUrl}</a>
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
 
           {history.length > 0 && (
             <div className="form-panel history" style={{ marginTop: 16 }}>

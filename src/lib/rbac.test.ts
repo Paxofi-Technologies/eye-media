@@ -11,11 +11,6 @@ describe('can', () => {
     expect(can('media_manager', 'video.publish')).toBe(false)
     expect(can('reporter', 'video.publish')).toBe(false)
   })
-  it('keeps submitter PII away from roles that do not moderate', () => {
-    expect(can('media_manager', 'submission.contact.view')).toBe(false)
-    expect(can('reporter', 'submission.contact.view')).toBe(false)
-    expect(can('moderator', 'submission.contact.view')).toBe(true)
-  })
   it('reserves user management for admins', () => {
     expect(can('editor', 'users.manage')).toBe(false)
   })

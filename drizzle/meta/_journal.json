@@ -43,6 +43,13 @@
       "when": 1791889881084,
       "tag": "0005_mux",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1792427035873,
+      "tag": "0006_drop-citizen-intake",
+      "breakpoints": true
     }
   ]
 }

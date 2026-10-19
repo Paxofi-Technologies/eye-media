@@ -8,7 +8,7 @@ import { StatusPill } from '@/components/admin/StatusPill'
 import { publishBlocker } from '@/lib/publish'
 import { Player } from '@/components/tv/Player'
 import { playbackForVideo, staffThumbnail } from '@/lib/playback-server'
-import { getModerationHistory, getQueue, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
+import { getModerationHistory, getQueue, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatDateTime, formatDuration, timeAgo } from '@/lib/format'
 import { can } from '@/lib/rbac'
@@ -60,12 +60,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
     )
   }
 
-  const [contact, history] = selected
-    ? await Promise.all([
-        can(user.role, 'submission.contact.view') ? getSubmitterContact(selected.video.id) : null,
-        getModerationHistory(selected.video.id),
-      ])
-    : [null, []]
+  const history = selected ? await getModerationHistory(selected.video.id) : []
   const v = selected?.video
   const inQueue = v && (v.status === 'pending' || v.status === 'flagged')
 
@@ -88,7 +83,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
                 <div>
                   <h2>{q.title}</h2>
                   <div className="qmeta">
-                    {q.source === 'citizen' ? 'Earlier public submission' : q.reporterName} · {q.categoryName ?? 'Uncategorised'} ·{' '}
+                    {q.source === 'eye_report' ? 'From EyeReport' : q.reporterName} · {q.categoryName ?? 'Uncategorised'} ·{' '}
                     {timeAgo(q.createdAt)}
                   </div>
                   <StatusPill status={q.status} extra={q.sensitive ? 'Sensitive' : undefined} />
@@ -111,7 +106,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
             <div className="kv-row">
               <span className="k">Submitted by</span>
               <span className="v">
-                {v.source === 'citizen' ? `${v.reporterName ?? 'Anonymous'} (earlier public submission, unverified)` : (selected.reporterAccountName ?? v.reporterName)}
+                {v.source === 'eye_report' ? `${v.reporterName ?? 'Anonymous'} (EyeReport, unverified)` : (selected.reporterAccountName ?? v.reporterName)}
               </span>
             </div>
             <div className="kv-row">
@@ -130,26 +125,6 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
               <span className="k">Received</span>
               <span className="v">{formatDateTime(v.createdAt)}</span>
             </div>
-            {v.submittedMediaUrl && (
-              <div className="kv-row">
-                <span className="k">Submitted link</span>
-                <span className="v">
-                  <a href={v.submittedMediaUrl} target="_blank" rel="noopener noreferrer nofollow">
-                    {v.submittedMediaUrl}
-                  </a>{' '}
-                  <span className="cell-sub">— external, unverified link: open with care</span>
-                </span>
-              </div>
-            )}
-            {contact && (
-              <div className="pii-box">
-                <div className="t">Submitter contact · confidential</div>
-                <div className="kv-row"><span className="k">Reference</span><span className="v">{contact.reference}</span></div>
-                <div className="kv-row"><span className="k">Name</span><span className="v">{contact.name}</span></div>
-                {contact.email && <div className="kv-row"><span className="k">Email</span><span className="v">{contact.email}</span></div>}
-                {contact.phone && <div className="kv-row"><span className="k">Phone</span><span className="v">{contact.phone}</span></div>}
-              </div>
-            )}
             {v.description && <p className="review-desc">{v.description}</p>}
 
             {inQueue && can(user.role, 'queue.moderate') ? (

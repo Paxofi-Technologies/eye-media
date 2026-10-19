@@ -125,7 +125,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
                           <div className="cell-title">
                             <Link href={`/admin/videos/${r.id}`}>{r.title}</Link>
                           </div>
-                          <div className="cell-sub">{r.provider === 'upload' ? 'File upload' : `YT: ${r.providerRef ?? '—'}`}{r.source === 'citizen' ? ' · citizen' : ''}</div>
+                          <div className="cell-sub">{r.provider === 'mux' ? 'Mux' : r.provider === 'upload' ? 'Old file upload' : `YouTube: ${r.providerRef ?? '—'}`}{r.source === 'eye_report' ? ' · EyeReport' : ''}</div>
                         </div>
                       </div>
                     </td>

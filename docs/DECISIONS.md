@@ -38,5 +38,6 @@ target backend, Vite removed) was approved by the owner on 10 Oct 2026. See [ARC
 ## D17 — Eye TV has no public submission; citizens report through Eye Report
 **Decision (product owner):** Only Eye Media staff and reporters create reports on Eye TV. Citizen contributions belong to Eye Report alone. The public "Report a story" form, its page, the public upload endpoint and the citizen rate limits are removed; `/tv/submit` redirects to the home page.
 **Reporters:** may sign in, create videos, upload from their device, and send their own drafts for review. They see only their own videos, cannot publish, feature, verify or moderate. Editors/moderators review and publish as before.
-**Kept:** the `source='citizen'` value and the submitter-contacts table remain so rows already stored stay readable; nothing creates new ones. They can be dropped in a later clean-up once the product owner confirms no legacy data is needed.
+**Removed data:** the owner confirmed no earlier citizen data is needed, so migration 0006 deletes citizen-sourced videos, their reviews and uploads, drops the submitter-contacts table and the submitted-link column, and changes `videos.source` to `staff | eye_report`.
+**EyeReport promotion:** approved EyeReport video reports are promoted to the Eye TV review queue by an editor or an approved integration (SRS FR-13). The hand-off mechanism is still to be designed; `source='eye_report'` is reserved for it. No contact details cross over.
 **Supersedes:** D7 and D9 for new data (no new citizen links or submitter PII are collected).
