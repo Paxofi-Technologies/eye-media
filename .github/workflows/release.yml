@@ -1,0 +1,39 @@
+name: cPanel release package
+
+# Builds the ready-to-upload cPanel package (eye-tv-release.zip) for every commit on main
+# whose CI passed. Download it from the run's "Artifacts" section and upload it in cPanel
+# (see docs/DEPLOYMENT-CPANEL.md). Nothing is deployed automatically.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build cPanel release
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build:cpanel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eye-tv-release-${{ github.event.workflow_run.head_sha || github.sha }}
+          path: release.zip
+          retention-days: 30

@@ -1,0 +1,165 @@
+/* eslint-disable @next/next/no-img-element -- thumbnails are served by YouTube's image CDN */
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { z } from 'zod'
+import { Restricted } from '@/components/admin/Restricted'
+import { ReviewForm } from '@/components/admin/ReviewForm'
+import { StatusPill } from '@/components/admin/StatusPill'
+import { publishBlocker } from '@/lib/publish'
+import { Player } from '@/components/tv/Player'
+import { playbackForVideo, staffThumbnail } from '@/lib/playback-server'
+import { getModerationHistory, getQueue, getVideoForStaff } from '@/lib/admin'
+import { requireStaff } from '@/lib/auth'
+import { formatDateTime, formatDuration, timeAgo } from '@/lib/format'
+import { can } from '@/lib/rbac'
+
+export const metadata: Metadata = { title: 'Moderation Queue' }
+
+export default async function QueuePage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
+  const user = await requireStaff()
+
+  const header = (
+    <div className="admin-topbar">
+      <div>
+        <h1>Moderation Queue</h1>
+        <div className="sub">Review reporter videos before they publish to Eye TV.</div>
+      </div>
+    </div>
+  )
+
+  if (!can(user.role, 'queue.view')) {
+    return (
+      <>
+        {header}
+        <Restricted title="Editor access required">
+          Your role can create and track videos in the <Link href="/admin/videos">Video Registry</Link>, but only
+          editors and moderators can review and publish the moderation queue.
+        </Restricted>
+      </>
+    )
+  }
+
+  const queue = await getQueue()
+  const { id } = await searchParams
+  const selectedId = z.uuid().safeParse(id).success ? id! : queue[0]?.id
+  const selected = selectedId ? await getVideoForStaff(selectedId) : null
+
+  if (queue.length === 0 && !selected) {
+    return (
+      <>
+        {header}
+        <div className="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+          <h3>Queue is clear</h3>
+          <p>Nothing is waiting on review. Videos that reporters send for review land here automatically.</p>
+        </div>
+      </>
+    )
+  }
+
+  const history = selected ? await getModerationHistory(selected.video.id) : []
+  const v = selected?.video
+  const inQueue = v && (v.status === 'pending' || v.status === 'flagged')
+
+  return (
+    <>
+      {header}
+      <div className="q-layout">
+        <div className="q-list" role="list" aria-label="Items awaiting review">
+          {queue.map((q) => {
+            const thumb = staffThumbnail(q)
+            return (
+              <Link
+                role="listitem"
+                key={q.id}
+                className="q-item"
+                href={`/admin?id=${q.id}`}
+                aria-current={q.id === selectedId ? 'true' : undefined}
+              >
+                <div className="qthumb">{thumb && <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" />}</div>
+                <div>
+                  <h2>{q.title}</h2>
+                  <div className="qmeta">
+                    {q.source === 'eye_report' ? 'From EyeReport' : q.reporterName} · {q.categoryName ?? 'Uncategorised'} ·{' '}
+                    {timeAgo(q.createdAt)}
+                  </div>
+                  <StatusPill status={q.status} extra={q.sensitive ? 'Sensitive' : undefined} />
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+
+        {v && selected ? (
+          <section className="review-panel" aria-label="Review">
+            <Player source={playbackForVideo(v, { preview: true })} title={v.title} />
+            <h2>{v.title}</h2>
+            <div className="kv-row">
+              <span className="k">Status</span>
+              <span className="v">
+                <StatusPill status={v.status} />
+              </span>
+            </div>
+            <div className="kv-row">
+              <span className="k">Submitted by</span>
+              <span className="v">
+                {v.source === 'eye_report' ? `${v.reporterName ?? 'Anonymous'} (EyeReport, unverified)` : (selected.reporterAccountName ?? v.reporterName)}
+              </span>
+            </div>
+            <div className="kv-row">
+              <span className="k">Category</span>
+              <span className="v">{selected.categoryName ?? '—'}</span>
+            </div>
+            <div className="kv-row">
+              <span className="k">Location</span>
+              <span className="v">{v.location ?? '—'}</span>
+            </div>
+            <div className="kv-row">
+              <span className="k">Duration</span>
+              <span className="v">{formatDuration(v.durationSeconds) ?? '—'}</span>
+            </div>
+            <div className="kv-row">
+              <span className="k">Received</span>
+              <span className="v">{formatDateTime(v.createdAt)}</span>
+            </div>
+            {v.description && <p className="review-desc">{v.description}</p>}
+
+            {inQueue && can(user.role, 'queue.moderate') ? (
+              <ReviewForm
+                key={v.id}
+                videoId={v.id}
+                canPublish={!publishBlocker(v)}
+                publishHint={publishBlocker(v)}
+              />
+            ) : (
+              <p className="field-hint">This item is no longer in the queue.</p>
+            )}
+            {can(user.role, 'video.edit') && (
+              <p style={{ marginTop: 14 }}>
+                <Link className="btn btn-ghost btn-sm" href={`/admin/videos/${v.id}`}>
+                  Edit video
+                </Link>
+              </p>
+            )}
+            {history.length > 0 && (
+              <div className="history">
+                <h3>Review history</h3>
+                <ul>
+                  {history.map((h) => (
+                    <li key={h.id}>
+                      <strong>{h.reviewerName ?? 'Former staff'}</strong> {h.decision} · {formatDateTime(h.createdAt)}
+                      {h.notes && <> — {h.notes}</>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        ) : null}
+      </div>
+    </>
+  )
+}

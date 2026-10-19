@@ -1,0 +1,45 @@
+# Engineering decisions (Eye TV MVP)
+
+Short records of the choices made while building. The architecture itself (Next.js public + admin, PCF v1.1.0 as the
+target backend, Vite removed) was approved by the owner on 10 Oct 2026. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+| # | Decision | Why |
+|---|---|---|
+| D1 | **One repo, `eye-media`, with Eye TV as the first module** under `/tv` | The SRS defines one platform with four pillars sharing identity, RBAC, moderation and media. Separate repos would duplicate that backbone. The routes match SRS §5. |
+| D2 | **Next.js 16 (App Router) + TypeScript** for both the public site and admin. **Vite removed** (owner decision, 10 Oct 2026). | Server-rendered pages are fast on Nigerian mobile networks and good for SEO (NFR-02, FR-10). One deployable unit suits cPanel hosting. |
+| D3 | **MySQL 8 / MariaDB 10.6+ via Drizzle ORM** | Owner requirement: cPanel hosting. Drizzle has no binary engine (unlike Prisma), so it runs anywhere Node runs. IDs are app-generated UUIDs and JSON is stored as TEXT, so the same schema works on MySQL and MariaDB. |
+| D4 | **Deploy to cPanel “Setup Node.js App” on Node 22; the release zip is built in CI and uploaded by hand** | Shared hosts can't reliably build Next.js. The release is self-contained, with `server/` kept out of the app root because of how CloudLinux handles `node_modules`. Migrations run automatically on boot. Node 22 is the minimum: Node 20 reaches end-of-life in April 2026. |
+| D5 | **YouTube as the only video/live provider for MVP** (`provider` column ready for more) | SRS §10 / FR-04: no custom streaming infrastructure. YouTube handles transcoding, CDN and live ingest for free. |
+| D6 | **The YouTube stream key is never stored in Eye TV** | The prototype showed it in the admin. It's a broadcast secret that belongs in YouTube Studio or OBS; Eye TV only needs the public video id to embed. |
+| D7 | **Citizen video links are not embedded publicly.** Staff re-upload approved footage to the Eye TV channel. | Third-party links are untrusted (malware, rights, takedowns). Approval requires an Eye TV YouTube video to be attached. |
+| D8 | **Approval requires the full verification checklist; flag/reject require a note** | Enforces “open access + professional gatekeeping” on the server, not just in the UI. |
+| D9 | **Submitter PII lives in its own table** and is shown only to roles with `submission.contact.view` | NFR-05: public queries can't leak it by accident. The e2e suite asserts this. |
+| D10 | **Session auth built in** (argon2id, hashed session tokens in the DB, HttpOnly SameSite cookies) | Five staff roles don't justify an external IdP for MVP. The structure is ready for SSO or 2FA later. |
+| D11 | **Strict CSP with per-request nonces**, privacy-enhanced YouTube embeds, click-to-play | Defence against XSS. No third-party requests until the viewer chooses to play. |
+| D12 | **Styling in plain CSS with brand tokens** (ported from the prototype) | The Figma redesign is expected soon, so this keeps the swap cheap and avoids committing to a CSS framework the designer may not use. |
+| D13 | **Staging at eyetv.paxofi.com, closed to search engines** (`SITE_INDEXING` off) | The same release later moves to the production domain with `SITE_INDEXING=true`. Staging can't be indexed and compete with the real site. |
+| D14 | **Backend: PCF v1.1.0 is the target. Eye TV ships first with an interim Next.js server layer.** | Owner decision, 10 Oct 2026: keep momentum now and move to PCF once concluded. Pages only call query modules and server actions, so the backend can be swapped behind them. Plan in [ARCHITECTURE.md](ARCHITECTURE.md). |
+| D15 | **Concurrent live broadcasts as `live_events`** (any number live at once), each mapped to its own YouTube Live broadcast and stream key, plus a public Live Schedule | Owner need: several locations and devices live simultaneously. YouTube supports multiple concurrent broadcasts per channel at no cost. Paid platforms (Mux, Cloudflare Stream, Amazon IVS) remain an option through the `provider` field when browser-based phone streaming, own branding or API automation is required. See [LIVE-STREAMING.md](LIVE-STREAMING.md). |
+
+## Open items for the product owner / client (SRS §13)
+
+- ~~Final editorial policy and privacy/consent wording~~ — approved by the owner (10 Oct 2026).
+- Contributor terms and the data-retention period for submitter details.
+- Production YouTube channel for Eye TV, plus who holds the channel credentials.
+- Production domain. (cPanel with Node.js 22 is confirmed, and staging will be eyetv.paxofi.com.)
+- Whether direct video upload (rather than links) is needed for MVP. That would need storage and a size policy.
+
+## D16 — Mux for all video and live streaming (replaces YouTube)
+**Decision:** Uploads, archive playback and live streams run on Mux; YouTube is no longer used for hosting.
+**Why:** a YouTube takedown or account strike must not remove the platform's content; full control of the player; private-until-published media; per-event live streams with optional simulcast to YouTube/Facebook for reach.
+**How:** unpublished media has only a *signed* playback id; a *public* id is added on publish / go-live and removed on unpublish / end. Private ids are never sent to public pages. Webhooks (HMAC-verified, de-duplicated) keep status in step. Stream keys are never stored.
+**Trade-offs:** usage-based cost (delivery dominates at election scale); dependency on Mux availability; legacy YouTube/local rows are kept playable until migrated (phase 2 removes that code).
+
+## D17 — Eye TV has no public submission; citizens report through Eye Report
+**Decision (product owner):** Only Eye Media staff and reporters create reports on Eye TV. Citizen contributions belong to Eye Report alone. The public "Report a story" form, its page, the public upload endpoint and the citizen rate limits are removed; `/tv/submit` redirects to the home page.
+**Reporters:** may sign in, create videos, upload from their device, and send their own drafts for review. They see only their own videos, cannot publish, feature, verify or moderate. Editors/moderators review and publish as before.
+**Removed data:** the owner confirmed no earlier citizen data is needed, so migration 0006 deletes citizen-sourced videos, their reviews and uploads, drops the submitter-contacts table and the submitted-link column, and changes `videos.source` to `staff | eye_report`.
+**EyeReport promotion:** approved EyeReport video reports are promoted to the Eye TV review queue by an editor or an approved integration (SRS FR-13). The hand-off is **automatic** (owner decision): when EyeReport approves a video report it calls `POST /api/integrations/eye-report` (HMAC-signed, idempotent by `externalId`, strict payload with no personal fields); Eye TV asks Mux to fetch the file privately and queues the video as pending for editor review. Nothing publishes without an Eye TV editor. See docs/EYE-REPORT-INTEGRATION.md.
+**Supersedes:** D7 and D9 for new data (no new citizen links or submitter PII are collected).
+
+**Callback (owner decision):** Eye TV reports publish / reject / unpublish decisions back to EyeReport (`video.published|rejected|unpublished`, HMAC-signed with `X-EyeTV-Signature`, no internal notes), through a database outbox with automatic retries (1 min doubling to 6 h, 12 attempts). A timer started in `src/instrumentation.ts` retries every minute, so no cron job is needed on cPanel.
