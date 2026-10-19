@@ -34,3 +34,9 @@ target backend, Vite removed) was approved by the owner on 10 Oct 2026. See [ARC
 **Why:** a YouTube takedown or account strike must not remove the platform's content; full control of the player; private-until-published media; per-event live streams with optional simulcast to YouTube/Facebook for reach.
 **How:** unpublished media has only a *signed* playback id; a *public* id is added on publish / go-live and removed on unpublish / end. Private ids are never sent to public pages. Webhooks (HMAC-verified, de-duplicated) keep status in step. Stream keys are never stored.
 **Trade-offs:** usage-based cost (delivery dominates at election scale); dependency on Mux availability; legacy YouTube/local rows are kept playable until migrated (phase 2 removes that code).
+
+## D17 — Eye TV has no public submission; citizens report through Eye Report
+**Decision (product owner):** Only Eye Media staff and reporters create reports on Eye TV. Citizen contributions belong to Eye Report alone. The public "Report a story" form, its page, the public upload endpoint and the citizen rate limits are removed; `/tv/submit` redirects to the home page.
+**Reporters:** may sign in, create videos, upload from their device, and send their own drafts for review. They see only their own videos, cannot publish, feature, verify or moderate. Editors/moderators review and publish as before.
+**Kept:** the `source='citizen'` value and the submitter-contacts table remain so rows already stored stay readable; nothing creates new ones. They can be dropped in a later clean-up once the product owner confirms no legacy data is needed.
+**Supersedes:** D7 and D9 for new data (no new citizen links or submitter PII are collected).

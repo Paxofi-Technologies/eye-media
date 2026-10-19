@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: { default: 'Eye TV — A Clearer Tomorrow', template: '%s · Eye TV' },
   description:
-    'Eye TV is the citizen-powered video newsroom of Eye Media Group: verified reports, live coverage and programmes from Lagos.',
+    'Eye TV is the video newsroom of Eye Media Group: verified reports, live coverage and programmes from Lagos.',
   applicationName: 'Eye TV',
   openGraph: { siteName: 'Eye TV', type: 'website', locale: 'en_NG' },
   twitter: { card: 'summary_large_image' },

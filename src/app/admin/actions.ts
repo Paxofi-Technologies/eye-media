@@ -20,6 +20,7 @@ import {
   transitionEvent,
 } from '@/lib/mux-ops'
 import { addSimulcastTarget, getLiveStream, removeSimulcastTarget, resetStreamKey } from '@/lib/mux'
+import { canEditVideo } from '@/lib/rbac'
 import { RESERVED_SLUGS, videoSlug } from '@/lib/slug'
 import {
   MODERATION_CHECKLIST,
@@ -202,6 +203,14 @@ export async function saveVideo(_prev: ActionState, form: FormData): Promise<Act
 
   const existing = id ? (await db.select().from(schema.videos).where(eq(schema.videos.id, id)).limit(1))[0] : undefined
   if (id && !existing) return { ok: false, message: 'This video no longer exists.' }
+  if (existing && !canEditVideo(user, existing)) return denied()
+  // Reporters cannot promote their own work: editors decide what is featured, verified or an editor's pick.
+  if (user.role === 'reporter') {
+    values.featured = existing?.featured ?? false
+    values.editorsPick = existing?.editorsPick ?? false
+    values.verified = existing?.verified ?? false
+  }
+  if (id && !existing) return { ok: false, message: 'This video no longer exists.' }
 
   // Video source: a newly uploaded file replaces whatever is attached; otherwise nothing about the media changes.
   const uploadId = form.get('uploadId')
@@ -265,6 +274,12 @@ export async function changeVideoStatus(form: FormData): Promise<void> {
 
   const [video] = await db.select().from(schema.videos).where(eq(schema.videos.id, id)).limit(1)
   if (!video) redirect('/admin/videos')
+  // Reporters may only send their own drafts for review, or pull them back to draft.
+  if (user.role === 'reporter') {
+    const mine = video.reporterId === user.id
+    const allowed = (status === 'pending' && (video.status === 'draft' || video.status === 'rejected')) || (status === 'draft' && video.status === 'pending')
+    if (!mine || !allowed) redirect(`/admin/videos?error=${encodeURIComponent('You can only send your own drafts for review.')}`)
+  }
 
   if (status === 'published') {
     const blocker = publishBlocker(video)

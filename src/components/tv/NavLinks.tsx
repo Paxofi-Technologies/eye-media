@@ -8,7 +8,6 @@ const LINKS = [
   { href: '/tv/live', label: 'Live' },
   { href: '/tv/schedule', label: 'Schedule' },
   { href: '/tv/archive', label: 'Archive' },
-  { href: '/tv/submit', label: 'Report a story' },
 ]
 
 export function NavLinks() {

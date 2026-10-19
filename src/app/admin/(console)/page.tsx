@@ -22,7 +22,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
     <div className="admin-topbar">
       <div>
         <h1>Moderation Queue</h1>
-        <div className="sub">Review citizen submissions and reporter uploads before they publish to Eye TV.</div>
+        <div className="sub">Review reporter videos before they publish to Eye TV.</div>
       </div>
     </div>
   )
@@ -54,7 +54,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
             <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
           </svg>
           <h3>Queue is clear</h3>
-          <p>Nothing is waiting on review. New citizen submissions and reporter uploads land here automatically.</p>
+          <p>Nothing is waiting on review. Videos that reporters send for review land here automatically.</p>
         </div>
       </>
     )
@@ -88,7 +88,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
                 <div>
                   <h2>{q.title}</h2>
                   <div className="qmeta">
-                    {q.source === 'citizen' ? 'Citizen submission' : q.reporterName} · {q.categoryName ?? 'Uncategorised'} ·{' '}
+                    {q.source === 'citizen' ? 'Earlier public submission' : q.reporterName} · {q.categoryName ?? 'Uncategorised'} ·{' '}
                     {timeAgo(q.createdAt)}
                   </div>
                   <StatusPill status={q.status} extra={q.sensitive ? 'Sensitive' : undefined} />
@@ -111,7 +111,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
             <div className="kv-row">
               <span className="k">Submitted by</span>
               <span className="v">
-                {v.source === 'citizen' ? `${v.reporterName ?? 'Anonymous'} (citizen, unverified)` : (selected.reporterAccountName ?? v.reporterName)}
+                {v.source === 'citizen' ? `${v.reporterName ?? 'Anonymous'} (earlier public submission, unverified)` : (selected.reporterAccountName ?? v.reporterName)}
               </span>
             </div>
             <div className="kv-row">

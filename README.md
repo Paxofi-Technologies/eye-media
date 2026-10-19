@@ -14,12 +14,12 @@ The Eye Media Group web platform from the [MVP SRS](https://app.notion.com/p/3d8
 - **Live:** any number of concurrent streams on `/tv/live`, a watch page per broadcast, and a **Live Schedule** (`/tv/schedule`) with a date strip, city filter and Lagos times.
 - Archive search with category, verification and date filters, plus pagination. Results are shareable URLs and work without JavaScript.
 - Video page with click-to-play Mux player (nothing loads from Mux until the viewer presses play), related videos, sharing, and SEO/Open Graph/JSON-LD metadata.
-- **Report a story**: citizens submit a story with a video link and contact details, receive a reference number, and the story lands in the moderation queue. Includes rate limiting and a honeypot.
+- **Reporter workflow**: Eye Media reporters sign in to the admin, create a video (upload from their device or phone), and send it for review. There is no public submission form: citizens report through Eye Report, a separate platform.
 - Editorial & privacy policy page (approved by the owner), sitemap, robots.txt and a health check.
 
 **Staff admin (`/admin`)**
 - Session login: argon2id password hashing, HttpOnly cookies, rate limiting.
-- **Moderation queue**: a verification checklist must be complete before approving. A note is required to flag or reject. Submitter contact details are shown only to roles allowed to see them.
+- **Moderation queue**: a verification checklist must be complete before approving. A note is required to flag or reject. 
 - **Video registry**: create, edit, publish and unpublish, with filters and stats.
 - **Live & schedule**: schedule live events (city, venue, time) with a Mux stream each, optional simulcast to YouTube/Facebook, go live, end or cancel several at once, and turn an ended stream into a replay draft. Operator guide: [docs/LIVE-STREAMING.md](docs/LIVE-STREAMING.md).
 - **Audit & history**: every sign-in, moderation decision, edit and publish is recorded.
@@ -33,7 +33,6 @@ The Eye Media Group web platform from the [MVP SRS](https://app.notion.com/p/3d8
 | Create/edit videos | ✓ | ✓ | | ✓ | |
 | Publish/unpublish | ✓ | ✓ | | | |
 | Live stream & schedule | ✓ | ✓ | | ✓ | |
-| See submitter contact details | ✓ | ✓ | ✓ | | |
 | Audit log | ✓ | ✓ | | | |
 | Manage staff | ✓ | | | | |
 
@@ -72,7 +71,7 @@ Use them to see how each role experiences the admin.
 |---|---|
 | `npm run lint` / `npm run typecheck` | ESLint (Next.js rules) and strict TypeScript |
 | `npm test` | Unit tests: RBAC, validation, Mux signing and webhook verification, slugs, rate limiting |
-| `npm run test:e2e` | Drives the real app in Chromium: submit a story → editor logs in → checklist → approve → public page (and checks PII isn't leaked) → RBAC for the reporter role → sign-out. It also saves screenshots of every key screen to `screenshots/`. Needs a seeded database and a running server; set `E2E_PASSWORD`. |
+| `npm run test:e2e` | Drives the real app in Chromium against a mock Mux: reporter uploads and sends a video for review → editor logs in → checklist → approve → public page (private ids never exposed) → live streams, simulcast and webhooks → RBAC |
 
 All of this runs in GitHub Actions on every push, against a real MariaDB 10.11. The screenshots are attached to each CI run as an artifact for design review.
 

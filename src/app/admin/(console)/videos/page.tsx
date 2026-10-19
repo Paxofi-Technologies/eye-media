@@ -24,12 +24,13 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
   const categoryId = z.uuid().safeParse(sp.category).success ? sp.category! : null
   const status = STATUS_OPTIONS.some(([s]) => s === sp.status) ? (sp.status as VideoStatus) : null
   const page = parsePage(sp.page)
+  const ownerId = user.role === 'reporter' ? user.id : null
 
   const [stats, categories, liveCount, { rows, total }] = await Promise.all([
-    getVideoStats(),
+    getVideoStats(ownerId),
     getCategories(),
     getLiveCount(),
-    listVideos({ q, categoryId, status, page }),
+    listVideos({ q, categoryId, status, page, ownerId }),
   ])
   const pages = Math.max(1, Math.ceil(total / REGISTRY_PAGE_SIZE))
   const href = (p: number) => {
@@ -46,7 +47,7 @@ export default async function RegistryPage({ searchParams }: { searchParams: Pro
       <div className="admin-topbar">
         <div>
           <h1>Video Registry</h1>
-          <div className="sub">Every video across Eye TV, with publication status and metadata.</div>
+          <div className="sub">{user.role === 'reporter' ? 'Your videos and where they are in review.' : 'Every video across Eye TV, with publication status and metadata.'}</div>
         </div>
         {can(user.role, 'video.edit') && (
           <Link className="btn btn-primary" href="/admin/videos/new">

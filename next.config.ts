@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@node-rs/argon2'],
   // No next/image usage (thumbnails come from YouTube's CDN), so skip shipping sharp.
   images: { unoptimized: true },
+  // Eye TV no longer takes public submissions (citizens report through Eye Report): keep old links working.
+  async redirects() {
+    return [{ source: '/tv/submit', destination: '/tv', permanent: true }]
+  },
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

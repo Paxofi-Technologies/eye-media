@@ -64,7 +64,7 @@ export default async function TvLayout({ children }: { children: React.ReactNode
             <div>
               <Logo href="/tv" sub="TV" label="Eye TV home" />
               <p style={{ maxWidth: '36ch', margin: '12px 0 0' }}>
-                A citizen-powered broadcast platform for Lagos, part of Eye Media Group. Truth, for a more informed
+                The video newsroom of Eye Media Group: reports, live coverage and programmes from Lagos. Truth, for a more informed
                 tomorrow.
               </p>
             </div>
@@ -77,16 +77,15 @@ export default async function TvLayout({ children }: { children: React.ReactNode
               </ul>
             </div>
             <div>
-              <h2>Get involved</h2>
+              <h2>About</h2>
               <ul>
-                <li><Link href="/tv/submit">Report a story</Link></li>
-                <li><Link href="/tv/editorial-policy#submissions">How submissions are reviewed</Link></li>
+                <li><Link href="/tv/editorial-policy#review">How reports are reviewed</Link></li>
               </ul>
             </div>
             <div>
               <h2>Eye Media Group</h2>
               <ul>
-                <li>EyeReport — coming soon</li>
+                <li>Eye Report — citizen reports</li>
                 <li>Eye News — coming soon</li>
                 <li>Eye Photo — coming soon</li>
               </ul>

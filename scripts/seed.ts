@@ -196,8 +196,8 @@ async function main() {
       id: ojota.id,
       slug: 'ojota-flyover-pothole-complaint', title: 'Ojota flyover pothole complaint',
       description: 'Large pothole on the Ojota flyover causing cars to swerve into the next lane during rush hour.',
-      categoryId: cat('traffic-transport'), source: 'citizen', submittedMediaUrl: 'https://drive.example.com/ojota-pothole',
-      location: 'Ojota, Lagos', reporterName: 'Adebayo O.', status: 'flagged', createdAt: ago(0.7),
+      categoryId: cat('traffic-transport'), providerRef: DEMO_YT, durationSeconds: 140,
+      location: 'Ojota, Lagos', reporterName: 'Tunde Balogun', reporterId: personId('Tunde Balogun'), status: 'flagged', createdAt: ago(0.7),
     })
   const alaba = { id: randomUUID(), title: 'Alaba market generator incident, aftermath' }
   await db
@@ -215,9 +215,6 @@ async function main() {
     categoryId: cat('government-policy'), providerRef: DEMO_YT, durationSeconds: 552, location: 'Marina, Lagos Island',
     reporterName: 'Ngozi Fadipe', reporterId: personId('Ngozi Fadipe'), status: 'pending', createdAt: ago(2),
   })
-  await db.insert(schema.submitterContacts).values({
-    videoId: ojota.id, reference: 'EYE-7K2M9Q', name: 'Adebayo O.', email: 'adebayo@example.com', phone: '+234 800 000 0000', consentAt: ago(0.7),
-  })
   await db.insert(schema.moderationReviews).values({
     videoId: ojota.id, reviewerId: personId('Chiamaka Obi'), decision: 'flagged', notes: 'Possible duplicate of an existing report.', checklist: {},
   })
@@ -225,7 +222,7 @@ async function main() {
   // A rejected item so the registry shows every state.
   await db.insert(schema.videos).values({
     slug: 'yaba-street-parade-unverified', title: 'Yaba street parade footage (unverified source)',
-    categoryId: cat('community-voices'), source: 'citizen', reporterName: 'Citizen upload', status: 'rejected', createdAt: ago(30),
+    categoryId: cat('community-voices'), reporterName: 'Ngozi Fadipe', reporterId: personId('Ngozi Fadipe'), status: 'rejected', createdAt: ago(30),
   })
 
   // Live events: two broadcasts on air at once, more scheduled, and yesterday's with a published replay.

@@ -9,10 +9,6 @@ export function randomCode(length: number): string {
   return out
 }
 
-export function submissionReference(): string {
-  return `EYE-${randomCode(6)}`
-}
-
 export function slugSuffix(): string {
   return randomCode(5).toLowerCase()
 }

@@ -23,47 +23,12 @@ const optionalUuid = z
   .transform((v) => (v ? v : null))
 
 export const MODERATION_CHECKLIST = [
-  { key: 'source', label: 'Source is a verified reporter or cross-checked citizen upload' },
+  { key: 'source', label: 'Source is a verified Eye Media reporter or staff member' },
   { key: 'safe', label: 'No graphic, violent or identifying-of-minors content' },
   { key: 'corroborated', label: 'Location and timestamp corroborated' },
   { key: 'policy', label: 'Matches Eye Media editorial policy tone & sourcing rules' },
 ] as const
 export type ChecklistKey = (typeof MODERATION_CHECKLIST)[number]['key']
-
-/* ---------------- Public: citizen story submission ---------------- */
-
-export const submissionSchema = z
-  .object({
-    title: z.string().trim().min(8, 'Give your story a short headline (8+ characters).').max(200),
-    description: z
-      .string()
-      .trim()
-      .min(20, 'Describe what happened in a little more detail (20+ characters).')
-      .max(4000),
-    // An unselected <select> with a disabled placeholder isn't submitted at all, hence the custom error.
-    category: z.string({ error: 'Choose a category.' }).trim().regex(SLUG_PATTERN, 'Choose a category.'),
-    location: z.string().trim().min(2, 'Tell us where this happened.').max(160),
-    mediaUrl: z
-      .string()
-      .trim()
-      .max(500)
-      .refine((v) => v === '' || /^https:\/\/[^\s]+$/i.test(v), 'Use a full https:// link to your video.')
-      .transform((v) => (v === '' ? null : v)),
-    name: z.string().trim().min(2, 'Enter your name.').max(120),
-    email: z
-      .union([z.literal(''), z.email('Enter a valid email address.').max(254)])
-      .transform((v) => (v === '' ? null : v.toLowerCase())),
-    phone: z
-      .string()
-      .trim()
-      .max(40)
-      .refine((v) => v === '' || /^\+?[0-9 ()-]{7,}$/.test(v), 'Enter a valid phone number.')
-      .transform((v) => (v === '' ? null : v)),
-    consent: z.literal('on', { error: 'You must accept the submission terms.' }),
-    // Honeypot: real users never see or fill this field.
-    website: z.string().max(0).optional().default(''),
-  })
-  .refine((d) => d.email || d.phone, { message: 'Give us an email or phone number so an editor can reach you.', path: ['email'] })
 
 /* ---------------- Staff: auth ---------------- */
 

@@ -21,11 +21,11 @@ async function json(res: Response) {
  * the surrounding form as hidden `uploadId` / `uploadToken` inputs.
  */
 export function VideoUpload({
-  purpose,
+  purpose = 'staff',
   label = 'Upload a video from your device',
   current,
 }: {
-  purpose: 'citizen' | 'staff'
+  purpose?: 'staff'
   label?: string
   current?: string | null
 }) {

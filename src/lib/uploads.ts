@@ -87,7 +87,6 @@ function ignoreNotFound(e: unknown) {
 
 /** Starts a direct upload to Mux. The browser sends the file to the returned URL, not to this server. */
 export async function createUpload(input: {
-  purpose: 'citizen' | 'staff'
   name: string
   size: number
   userId: string | null
@@ -104,7 +103,7 @@ export async function createUpload(input: {
     const mux = await createDirectUpload({ corsOrigin: new URL(siteUrl()).origin, passthrough: id })
     await db.insert(schema.mediaUploads).values({
       id,
-      purpose: input.purpose,
+      purpose: 'staff',
       tokenHash: sha256(token),
       muxUploadId: mux.id,
       originalName: input.name.replace(/[^\w.\- ()]/g, '_').slice(0, 200) || 'video',
@@ -177,7 +176,7 @@ export async function muxFieldsForAsset(assetId: string): Promise<MuxMediaFields
 export async function claimUpload(
   id: string | null | undefined,
   token: string | null | undefined,
-  purpose: 'citizen' | 'staff',
+  purpose: 'staff' = 'staff',
 ): Promise<(MediaUpload & { muxAssetId: string }) | null> {
   if (!id || !token) return null
   let row: MediaUpload

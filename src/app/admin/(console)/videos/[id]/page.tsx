@@ -11,7 +11,7 @@ import type { VideoStatus } from '@/db/schema'
 import { getModerationHistory, getSubmitterContact, getVideoForStaff } from '@/lib/admin'
 import { requireStaff } from '@/lib/auth'
 import { formatCount, formatDateTime } from '@/lib/format'
-import { can } from '@/lib/rbac'
+import { can, canEditVideo, canViewVideo } from '@/lib/rbac'
 import { getCategories } from '@/lib/tv'
 import { uploadsEnabled } from '@/lib/uploads'
 
@@ -43,13 +43,14 @@ export default async function EditVideoPage({
   if (!row) notFound()
   const sp = await searchParams
   const v = row.video
+  if (!canViewVideo(user, v)) notFound()
 
   const [categories, history, contact] = await Promise.all([
     getCategories(),
     getModerationHistory(v.id),
     v.source === 'citizen' && can(user.role, 'submission.contact.view') ? getSubmitterContact(v.id) : null,
   ])
-  const canEdit = can(user.role, 'video.edit')
+  const canEdit = canEditVideo(user, v)
   const canPublish = can(user.role, 'video.publish')
   const inQueue = v.status === 'pending' || v.status === 'flagged'
 
@@ -59,7 +60,7 @@ export default async function EditVideoPage({
         <div>
           <h1>{v.title}</h1>
           <div className="sub">
-            <StatusPill status={v.status} /> · {v.source === 'citizen' ? 'Citizen submission' : 'Staff video'} · updated{' '}
+            <StatusPill status={v.status} /> · {v.source === 'citizen' ? 'Earlier public submission' : 'Eye Media video'} · updated{' '}
             {formatDateTime(v.updatedAt)}
           </div>
         </div>
@@ -96,12 +97,12 @@ export default async function EditVideoPage({
           <div className="form-panel">
             <h2>Publication</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {inQueue && (
+              {inQueue && can(user.role, 'queue.view') && (
                 <Link className="btn btn-ghost" href={`/admin?id=${v.id}`}>
                   Review in moderation queue
                 </Link>
               )}
-              {canEdit && (v.status === 'draft' || v.status === 'unpublished' || v.status === 'rejected') && (
+              {can(user.role, 'video.edit') && (canEdit || user.role !== 'reporter') && (v.status === 'draft' || v.status === 'unpublished' || v.status === 'rejected') && (
                 <StatusButton id={v.id} status="pending" label="Submit for review" className="btn-ghost" />
               )}
               {canPublish && v.status !== 'published' && !inQueue && (
@@ -110,11 +111,11 @@ export default async function EditVideoPage({
               {canPublish && v.status === 'published' && (
                 <StatusButton id={v.id} status="unpublished" label="Unpublish" className="btn-ghost" />
               )}
-              {canEdit && v.status === 'pending' && (
+              {can(user.role, 'video.edit') && (user.role !== 'reporter' || v.reporterId === user.id) && v.status === 'pending' && (
                 <StatusButton id={v.id} status="draft" label="Move back to draft" className="btn-ghost" />
               )}
             </div>
-            {!canPublish && <p className="field-hint">An editor must approve this video before it goes live.</p>}
+            {!canPublish && <p className="field-hint">An editor must review and publish this video before it goes live.</p>}
           </div>
 
           {contact && (

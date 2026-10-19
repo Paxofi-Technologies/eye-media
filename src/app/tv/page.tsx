@@ -72,13 +72,6 @@ export default async function TvHome() {
           </div>
           <div>
             <SchedulePanel heading="Live & up next" slots={schedule} now={now} />
-            <section className="panel cta-panel">
-              <h2>Seen something newsworthy?</h2>
-              <p>Send it to the Eye Media newsroom. Every submission is reviewed by an editor before it is published.</p>
-              <Link className="btn btn-primary" href="/tv/submit">
-                Report a story
-              </Link>
-            </section>
           </div>
         </div>
       </div>

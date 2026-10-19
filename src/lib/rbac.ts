@@ -33,7 +33,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   moderator: ['queue.view', 'queue.moderate', 'video.view', 'submission.contact.view'],
   media_manager: ['video.view', 'video.edit', 'live.manage', 'schedule.manage'],
-  reporter: ['video.view'],
+  // Reporters (Eye Media staff in the field) create and edit their own drafts and send them for review.
+  reporter: ['video.view', 'video.edit'],
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -47,4 +48,19 @@ export const ROLE_LABELS: Record<Role, string> = {
 export function can(role: Role | null | undefined, permission: Permission): boolean {
   if (!role) return false
   return ROLE_PERMISSIONS[role].includes(permission)
+}
+
+type OwnedVideo = { reporterId: string | null; status: string }
+
+/** Reporters may only see their own videos. Everyone else with `video.view` sees all. */
+export function canViewVideo(user: { id: string; role: Role }, video: Pick<OwnedVideo, 'reporterId'>): boolean {
+  if (!can(user.role, 'video.view')) return false
+  return user.role !== 'reporter' || video.reporterId === user.id
+}
+
+/** Reporters may edit only their own drafts (or ones sent back to them); editors and managers edit any video. */
+export function canEditVideo(user: { id: string; role: Role }, video: OwnedVideo): boolean {
+  if (!can(user.role, 'video.edit')) return false
+  if (user.role !== 'reporter') return true
+  return video.reporterId === user.id && (video.status === 'draft' || video.status === 'rejected')
 }

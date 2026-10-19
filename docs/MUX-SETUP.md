@@ -1,6 +1,6 @@
 # Connecting Eye TV to Mux — step by step
 
-Eye TV stores, converts and delivers all video through **Mux**: uploads from citizens and staff, the archive, and live streams.
+Eye TV stores, converts and delivers all video through **Mux**: uploads from Eye Media staff and reporters, the archive, and live streams.
 Unpublished videos are **private** on Mux. A public link is created only when a story is published or a live event goes on air, and removed again when it is unpublished or ends.
 
 You do this once per environment. Use **two separate Mux environments**: *Eye TV Staging* and *Eye TV Production*, so test videos never mix with real ones and each has its own keys.

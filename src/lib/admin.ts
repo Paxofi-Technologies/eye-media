@@ -86,16 +86,22 @@ export async function getModerationHistory(videoId: string) {
     .orderBy(desc(schema.moderationReviews.createdAt))
 }
 
-export async function getVideoStats() {
-  const rows = await db.select({ status: videos.status, n: count() }).from(videos).groupBy(videos.status)
+/** `ownerId` limits everything to one reporter's own videos. */
+export async function getVideoStats(ownerId: string | null = null) {
+  const rows = await db
+    .select({ status: videos.status, n: count() })
+    .from(videos)
+    .where(ownerId ? eq(videos.reporterId, ownerId) : undefined)
+    .groupBy(videos.status)
   const by = Object.fromEntries(rows.map((r) => [r.status, r.n])) as Partial<Record<VideoStatus, number>>
   return by
 }
 
 export const REGISTRY_PAGE_SIZE = 10
 
-export async function listVideos(params: { q: string; categoryId: string | null; status: VideoStatus | null; page: number }) {
+export async function listVideos(params: { q: string; categoryId: string | null; status: VideoStatus | null; page: number; ownerId?: string | null }) {
   const conds: SQL[] = []
+  if (params.ownerId) conds.push(eq(videos.reporterId, params.ownerId))
   if (params.q) {
     const pattern = `%${params.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
     conds.push(or(like(videos.title, pattern), like(videos.reporterName, pattern), like(videos.providerRef, pattern))!)

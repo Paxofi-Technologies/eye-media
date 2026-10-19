@@ -20,7 +20,7 @@ concluded. Public pages and admin screens stay in Next.js permanently. Only the 
  Next.js pages & components (public /tv, admin /admin)      ← stays as-is
         │ read                         │ write
         ▼                              ▼
- src/lib/tv.ts, src/lib/admin.ts    src/app/admin/actions.ts, src/app/tv/submit/actions.ts
+ src/lib/tv.ts, src/lib/admin.ts    src/app/admin/actions.ts
  (query functions)                  (server actions: validate → authorize → change → audit)
         │                              │
         └──────────────┬───────────────┘

@@ -89,7 +89,7 @@ Also in Cloudflare, for this subdomain:
 So the owner sees a full site, load the same demo stories as the prototype. This creates **no logins**.
 
 - **Run JS script** → **`eyetv:demo-content`**.
-- Before launch, remove it with **Run JS script** → **`eyetv:remove-demo`**. That deletes all videos, schedule entries, submissions and the audit log, but keeps staff accounts and categories.
+- Before launch, remove it with **Run JS script** → **`eyetv:remove-demo`**. That deletes all videos, schedule entries and the audit log, but keeps staff accounts and categories.
   Never run `eyetv:demo-content` on production.
 
 ---
@@ -141,6 +141,6 @@ Every *Run JS script* command and the app itself print the real database error (
 
 - Node.js **22+**, and MySQL 8 or MariaDB 10.6+.
 - **Videos** are stored, converted and delivered by Mux (up to 500MB per upload), so they do not use cPanel disk space or bandwidth. Old files from before Mux (if `MEDIA_DIR` is still set) stay playable and should be backed up with the database.
-- One app process. Login and submission rate limits are kept in memory, which is fine on cPanel. Before running several processes on a VPS, they must move to Redis.
+- One app process. Login rate limits are kept in memory, which is fine on cPanel. Before running several processes on a VPS, they must move to Redis.
 - Password hashing uses a prebuilt Linux x64 module, which works on standard cPanel/CloudLinux servers.
 - **Moving to a VPS later:** copy the same release folder, run `node app.js` behind Nginx with pm2 or systemd, and set the same variables. The data moves with `mysqldump`. No code changes are needed.

@@ -1,45 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { liveEventSchema, submissionSchema, videoSchema } from './validation'
-
-const validSubmission = {
-  title: 'Pothole on Ojota flyover',
-  description: 'Large pothole causing cars to swerve during rush hour.',
-  category: 'traffic-transport',
-  location: 'Ojota, Lagos',
-  mediaUrl: '',
-  name: 'Ade',
-  email: 'ade@example.com',
-  phone: '',
-  consent: 'on',
-  website: '',
-}
-
-describe('submissionSchema', () => {
-  it('accepts a valid submission', () => {
-    const r = submissionSchema.safeParse(validSubmission)
-    expect(r.success).toBe(true)
-    if (r.success) expect(r.data.mediaUrl).toBeNull()
-  })
-  it('gives a friendly message when no category is chosen', () => {
-    const r = submissionSchema.safeParse({ ...validSubmission, category: undefined })
-    expect(r.success).toBe(false)
-    if (!r.success) expect(r.error.issues.find((i) => i.path[0] === 'category')?.message).toBe('Choose a category.')
-  })
-  it('requires consent', () => {
-    expect(submissionSchema.safeParse({ ...validSubmission, consent: undefined }).success).toBe(false)
-  })
-  it('requires at least one contact method', () => {
-    const r = submissionSchema.safeParse({ ...validSubmission, email: '', phone: '' })
-    expect(r.success).toBe(false)
-  })
-  it('rejects non-https media links', () => {
-    expect(submissionSchema.safeParse({ ...validSubmission, mediaUrl: 'javascript:alert(1)' }).success).toBe(false)
-    expect(submissionSchema.safeParse({ ...validSubmission, mediaUrl: 'http://x.com/v' }).success).toBe(false)
-  })
-  it('flags the honeypot', () => {
-    expect(submissionSchema.safeParse({ ...validSubmission, website: 'spam' }).success).toBe(false)
-  })
-})
+import { liveEventSchema, videoSchema } from './validation'
 
 describe('videoSchema', () => {
   const base = {
