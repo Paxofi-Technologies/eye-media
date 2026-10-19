@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { startTransition, useActionState } from 'react'
 import { saveLiveEvent, type ActionState } from '@/app/admin/actions'
 import { Field } from '@/components/Field'
 
@@ -38,7 +38,16 @@ export function LiveEventForm({
   const e = state.errors ?? {}
   const v = initial
   return (
-    <form action={action} className="form-panel" key={state.ok ? state.message : 'form'}>
+    <form
+      className="form-panel"
+      key={state.ok ? state.message : 'form'}
+      // Not the `action` prop: React would clear every field when a check fails.
+      onSubmit={(ev) => {
+        ev.preventDefault()
+        const data = new FormData(ev.currentTarget)
+        startTransition(() => action(data))
+      }}
+    >
       <h2>{v ? 'Event details' : 'Schedule a live event'}</h2>
       {state.message && (
         <div className={state.ok ? 'alert alert-success' : 'alert alert-error'} role={state.ok ? 'status' : 'alert'}>

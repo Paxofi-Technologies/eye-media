@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { startTransition, useActionState } from 'react'
 import { saveVideo, type ActionState } from '@/app/admin/actions'
 import { Field } from '@/components/Field'
 import { VideoUpload } from '@/components/VideoUpload'
@@ -43,7 +43,15 @@ export function VideoForm({
   const v = initial
 
   return (
-    <form action={action}>
+    // Submit through onSubmit instead of the `action` prop: React resets a form's fields after an `action`
+    // finishes, which would wipe everything the reporter typed whenever a check (such as a bad link) fails.
+    <form
+      onSubmit={(ev) => {
+        ev.preventDefault()
+        const data = new FormData(ev.currentTarget)
+        startTransition(() => action(data))
+      }}
+    >
       <input type="hidden" name="id" value={v?.id ?? ''} />
       {state.message && (
         <div className={state.ok ? 'alert alert-success' : 'alert alert-error'} role={state.ok ? 'status' : 'alert'}>
