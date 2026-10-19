@@ -105,6 +105,8 @@ export const videos = mysqlTable(
     muxPrivatePlaybackId: varchar('mux_private_playback_id', { length: 64 }),
     muxPublicPlaybackId: varchar('mux_public_playback_id', { length: 64 }),
     mediaStatus: mysqlEnum('media_status', MEDIA_STATUSES).notNull().default('ready'),
+    // The EyeReport item this video was handed over from (source = 'eye_report'); makes the hand-off idempotent.
+    externalRef: varchar('external_ref', { length: 100 }),
     thumbnailUrl: varchar('thumbnail_url', { length: 500 }),
     durationSeconds: int('duration_seconds'),
     location: varchar('location', { length: 160 }),
@@ -126,6 +128,7 @@ export const videos = mysqlTable(
     index('videos_status_published_idx').on(t.status, t.publishedAt),
     index('videos_category_idx').on(t.categoryId),
     index('videos_mux_asset_idx').on(t.muxAssetId),
+    uniqueIndex('videos_external_ref_uq').on(t.externalRef),
   ],
 )
 

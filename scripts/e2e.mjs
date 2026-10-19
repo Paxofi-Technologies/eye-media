@@ -14,6 +14,7 @@ const appUrl = `http://localhost:${APP_PORT}`
 const tokenId = 'test-token-id'
 const tokenSecret = 'test-token-secret'
 const webhookSecret = 'test-webhook-secret'
+const eyeReportSecret = 'test-eyereport-secret'
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
 const keyB64 = Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
 
@@ -30,6 +31,7 @@ const app = spawn('npx', ['next', 'start', '-p', String(APP_PORT)], {
     MUX_WEBHOOK_SECRET: webhookSecret,
     MUX_SIGNING_KEY_ID: 'test-key-id',
     MUX_SIGNING_KEY_PRIVATE: keyB64,
+    EYE_REPORT_WEBHOOK_SECRET: eyeReportSecret,
   },
 })
 
@@ -49,7 +51,7 @@ try {
   code = await new Promise((resolve) => {
     const t = spawn('node', ['e2e/run.mjs'], {
       stdio: 'inherit',
-      env: { ...process.env, E2E_BASE_URL: appUrl, E2E_MOCK_URL: mock.url },
+      env: { ...process.env, E2E_BASE_URL: appUrl, E2E_MOCK_URL: mock.url, E2E_EYEREPORT_SECRET: eyeReportSecret },
     })
     t.on('exit', (c) => resolve(c ?? 1))
   })

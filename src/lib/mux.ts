@@ -123,6 +123,17 @@ export function createDirectUpload(input: { corsOrigin: string; passthrough: str
   })
 }
 
+/** Mux fetches the file itself from an https URL (used by the EyeReport hand-off). Private until published. */
+export function createAssetFromUrl(input: { url: string; passthrough: string }) {
+  const quality = process.env.MUX_VIDEO_QUALITY?.trim()
+  return muxRequest<MuxAsset>('POST', '/video/v1/assets', {
+    input: [{ url: input.url }],
+    playback_policy: ['signed'],
+    passthrough: input.passthrough,
+    ...(quality ? { video_quality: quality } : {}),
+  })
+}
+
 export const getDirectUpload = (id: string) => muxRequest<MuxDirectUpload>('GET', `/video/v1/uploads/${encodeURIComponent(id)}`)
 export const cancelDirectUpload = (id: string) => muxRequest('PUT', `/video/v1/uploads/${encodeURIComponent(id)}/cancel`)
 export const getAsset = (id: string) => muxRequest<MuxAsset>('GET', `/video/v1/assets/${encodeURIComponent(id)}`)

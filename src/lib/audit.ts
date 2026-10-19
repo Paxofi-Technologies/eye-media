@@ -6,6 +6,7 @@ export type AuditAction =
   | 'auth.login'
   | 'auth.logout'
   | 'video.created'
+  | 'video.imported'
   | 'video.updated'
   | 'video.published'
   | 'video.unpublished'
@@ -36,6 +37,7 @@ export const AUDIT_LABELS: Record<AuditAction, string> = {
   'auth.login': 'Signed in',
   'auth.logout': 'Signed out',
   'video.created': 'Created video',
+  'video.imported': 'Received video from EyeReport',
   'video.updated': 'Edited metadata',
   'video.published': 'Published',
   'video.unpublished': 'Unpublished',

@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
  *   E2E_PASSWORD=<SEED_ADMIN_PASSWORD> npm run test:e2e
  * Screenshots of every key screen are written to ./screenshots for design review.
  */
+import { createHmac } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000'
 const OUT = process.env.E2E_SCREENSHOTS ?? 'screenshots'
@@ -115,6 +116,34 @@ await rp.goto(BASE + '/admin/videos')
 check('reporter registry lists their own video but not colleagues’', (await rp.getByText(STORY).first().isVisible()) && (await rp.locator('.admin-table').innerText()).includes('Ngozi Fadipe') === false)
 await rp.screenshot({ path: `${OUT}/05-reporter-registry.png`, fullPage: true })
 
+// ---------- EyeReport hand-off (automatic, signed) ----------
+const ER_SECRET = process.env.E2E_EYEREPORT_SECRET
+const ER_ID = `ER-${RUN}`
+const ER_TITLE = `EyeReport handover ${RUN}`
+async function sendToEyeTv(payload, secret = ER_SECRET) {
+  const raw = JSON.stringify(payload)
+  const t = Math.floor(Date.now() / 1000)
+  const v1 = createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex')
+  const res = await fetch(BASE + '/api/integrations/eye-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-EyeReport-Signature': `t=${t},v1=${v1}` },
+    body: raw,
+  })
+  return { status: res.status, body: await res.json().catch(() => ({})) }
+}
+const erPayload = { externalId: ER_ID, title: ER_TITLE, description: 'Handed over from EyeReport after moderation.', category: 'public-safety', location: 'Ojota, Lagos', videoUrl: 'https://files.example.com/er/1042.mp4?sig=abc' }
+check('hand-off with a wrong secret is refused', (await sendToEyeTv(erPayload, 'wrong-secret')).status === 401)
+check('hand-off refuses citizen details', (await sendToEyeTv({ ...erPayload, externalId: ER_ID + 'x', phone: '+234 801 234 5678' })).status === 400)
+const er1 = await sendToEyeTv(erPayload)
+check('EyeReport hand-off creates a pending Eye TV video', er1.status === 201 && er1.body.status === 'pending')
+const er2 = await sendToEyeTv(erPayload)
+check('repeating the hand-off does not create a second video', er2.status === 200 && er2.body.duplicate === true && er2.body.id === er1.body.id)
+const erAsset = (await mockState()).assets.find((x) => x.input?.[0]?.url === erPayload.videoUrl)
+check('Mux is asked to fetch the file, private (signed only)', Boolean(erAsset) && erAsset.playback_ids.length === 1 && erAsset.playback_ids[0].policy === 'signed')
+const erPage = await (await browser.newContext()).newPage()
+const erPublic = await erPage.request.get(BASE + `/tv/archive?q=${RUN}&range=all`)
+check('handed-over video is not public until an editor publishes it', !(await erPublic.text()).includes(ER_TITLE))
+
 // ---------- mobile ----------
 const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, deviceScaleFactor: 2 })
 const m = await newPage(mob)
@@ -150,6 +179,7 @@ await a.screenshot({ path: `${OUT}/09-admin-registry.png`, fullPage: true })
 
 await a.goto(BASE + '/admin')
 check('queue lists the reporter video', await a.getByText(STORY).isVisible())
+check('queue shows the EyeReport hand-over', await a.getByText(ER_TITLE).isVisible())
 await a.getByText(STORY).click()
 await a.waitForURL(/id=/)
 check('editor can preview the uploaded video', await a.locator('.review-panel .player .poster').isVisible())
@@ -200,7 +230,7 @@ await a.getByRole('button', { name: 'Create draft' }).click()
 await a.waitForURL(/\/admin\/videos\/[0-9a-f-]{36}\?created=1/)
 check('staff video created from an uploaded file', await a.locator('.player').first().isVisible())
 st = await mockState()
-const staffAsset = st.assets.find((x) => x.id !== asset.id && x.playback_ids.length === 1 && x.playback_ids[0].policy === 'signed')
+const staffAsset = st.assets.find((x) => x.id !== asset.id && !x.input && x.playback_ids.length === 1 && x.playback_ids[0].policy === 'signed')
 check('draft staff video is private on Mux', Boolean(staffAsset))
 const staffUrl = a.url().split('?')[0]
 for (let i = 0; i < 20 && !(await mockState()).assets.find((x) => x.id === staffAsset.id && x.status === 'ready'); i++) await sleep(500)

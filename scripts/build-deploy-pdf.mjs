@@ -9,6 +9,7 @@ import { chromium } from 'playwright'
 const GUIDES = [
   { src: 'docs/DEPLOYMENT-CPANEL.md', out: 'docs/Eye-TV-cPanel-Deployment-Guide.pdf', title: 'cPanel deployment guide' },
   { src: 'docs/MUX-SETUP.md', out: 'docs/Eye-TV-Mux-Setup-Guide.pdf', title: 'Mux setup guide' },
+  { src: 'docs/EYE-REPORT-INTEGRATION.md', out: 'docs/Eye-TV-EyeReport-Integration-Guide.pdf', title: 'EyeReport hand-off guide' },
   { src: 'docs/LIVE-STREAMING.md', out: 'docs/Eye-TV-Live-Streaming-Guide.pdf', title: 'Live streaming guide' },
 ]
 const generated = new Date().toISOString().slice(0, 10)

@@ -120,6 +120,14 @@ export function startMockMux({ port, appUrl, tokenId, tokenSecret, webhookSecret
     const data = (d, status = 200) => send(res, status, { data: d })
     const notFound = () => send(res, 404, { error: { type: 'not_found', messages: ['Not found'] } })
 
+    if (path === '/video/v1/assets' && m === 'POST') {
+      const a = newAsset({ passthrough: body.passthrough, input: body.input })
+      setTimeout(() => {
+        a.status = 'ready'
+        void sendWebhook('video.asset.ready', { id: a.id })
+      }, 700)
+      return data(a, 201)
+    }
     if (path === '/video/v1/uploads' && m === 'POST') {
       const uid = id()
       const up = { id: uid, url: `${self}/upload/${uid}`, status: 'waiting', received: 0, passthrough: body.new_asset_settings?.passthrough }
